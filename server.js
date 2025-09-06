@@ -16,11 +16,12 @@ const PORT = process.env.PORT || 5000;
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: process.env.CLIENT_URL || "http://localhost:3000",
-    methods: ["GET", "POST"],
+    origin: process.env.CLIENT_URL || ["http://localhost:3000", "http://localhost:5173"],
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
     credentials: true
   }
 });
+
 const createUploadDirs = () => {
   const dirs = ['uploads', 'uploads/profiles'];
   dirs.forEach(dir => {
@@ -35,12 +36,19 @@ createUploadDirs();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
+// app.use(cors({
+//   origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:5173','*'], // Add your frontend URL
+//   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+//   allowedHeaders: ['Content-Type', 'Authorization'],
+//   credentials: true
+// }));
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:5173','*'], // Add your frontend URL
+  origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:5173', '*'],
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
 }));
+
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
@@ -270,7 +278,7 @@ const userSchema = new mongoose.Schema({
   // Account Info
   role: {
     type: String,
-    enum: ['user', 'admin'],
+    enum: ['user', 'admin','client','freelancer'],
     default: 'user'
   },
   isVerified: {
@@ -352,7 +360,99 @@ const projectSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 const Project = mongoose.model('Project', projectSchema);
+// Task Schema
+const taskSchema = new mongoose.Schema({
+  project: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Project',
+    required: true
+  },
+  bid: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Bid',
+    required: true
+  },
+  title: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  description: {
+    type: String,
+    trim: true
+  },
+  status: {
+    type: String,
+    enum: ['pending', 'in_progress', 'completed', 'rejected'],
+    default: 'pending'
+  },
+  priority: {
+    type: String,
+    enum: ['low', 'medium', 'high'],
+    default: 'medium'
+  },
+  dueDate: {
+    type: Date
+  },
+  assignedTo: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  },
+  assignedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  },
+  attachments: [{
+    filename: String,
+    originalName: String,
+    path: String,
+    uploadedAt: {
+      type: Date,
+      default: Date.now
+    }
+  }],
+  comments: [{
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true
+    },
+    content: {
+      type: String,
+      required: true
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now
+    }
+  }],
+  completionProof: {
+    description: String,
+    attachments: [{
+      filename: String,
+      originalName: String,
+      path: String,
+      uploadedAt: {
+        type: Date,
+        default: Date.now
+      }
+    }],
+    submittedAt: Date
+  },
+  approvedAt: Date,
+  rejectedReason: String
+}, {
+  timestamps: true
+});
 
+// Index for better query performance
+taskSchema.index({ project: 1, status: 1 });
+taskSchema.index({ assignedTo: 1, status: 1 });
+taskSchema.index({ assignedBy: 1 });
+
+const Task = mongoose.model('Task', taskSchema);
 // Bid Schema
 const bidSchema = new mongoose.Schema({
   project: {
@@ -514,18 +614,6 @@ const verifyToken = async (req, res, next) => {
       error: error.message
     });
   }
-};
-// Role-based authorization middleware
-const authorize = (...roles) => {
-  return (req, res, next) => {
-    if (!roles.includes(req.user.role)) {
-      return res.status(403).json({
-        success: false,
-        message: `User role ${req.user.role} is not authorized to access this route`
-      });
-    }
-    next();
-  };
 };
 app.post('/api/auth/register', async (req, res) => {
   try {
@@ -2518,21 +2606,72 @@ io.on('connection', (socket) => {
     console.log('User disconnected:', socket.id);
     // You could implement user offline status here
   });
+  // Join task room for real-time updates
+  socket.on('join_task', (taskId) => {
+    socket.join(`task_${taskId}`);
+    console.log(`User joined task: ${taskId}`);
+  });
+
+  // Leave task room
+  socket.on('leave_task', (taskId) => {
+    socket.leave(`task_${taskId}`);
+    console.log(`User left task: ${taskId}`);
+  });
+
+  // Handle task updates from clients
+  socket.on('task_update', async (data) => {
+    try {
+      const { taskId, updates } = data;
+      
+      // Verify user has permission to update the task
+      const task = await Task.findById(taskId);
+      if (!task) return;
+
+      const hasAccess = (
+        task.assignedTo.toString() === socket.userId ||
+        task.assignedBy.toString() === socket.userId
+      );
+
+      if (!hasAccess) return;
+
+      // Broadcast update to other users in the task room
+      socket.to(`task_${taskId}`).emit('task_updated', {
+        taskId,
+        updates,
+        updatedBy: socket.userId
+      });
+    } catch (error) {
+      console.error('Error handling task update:', error);
+    }
+  });
 });
-app.get('/api/chat/stats', verifyToken, async (req, res) => {
+app.get('/api/chat/stats', async (req, res) => {
   try {
-    const userId = req.user.id;
+    const { userId } = req.query;
+
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: 'User ID is required'
+      });
+    }
+
+    // ✅ Convert userId to ObjectId
+    const objectId = new mongoose.Types.ObjectId(userId);
+
+    const conversationIds = (await Conversation.find({ participants: objectId }).select('_id'))
+      .map(c => c._id);
 
     const [totalConversations, unreadMessages, activeChats] = await Promise.all([
-      Conversation.countDocuments({ participants: userId }),
+      Conversation.countDocuments({ participants: objectId }),
       Message.countDocuments({
-        conversation: { $in: await Conversation.find({ participants: userId }).select('_id') },
-        sender: { $ne: userId },
+        conversation: { $in: conversationIds },
+        sender: { $ne: objectId },
         read: false
       }),
       Conversation.countDocuments({
-        participants: userId,
-        updatedAt: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } // Last 7 days
+        participants: objectId,
+        updatedAt: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) }
       })
     ]);
 
@@ -2615,8 +2754,1458 @@ app.get('/api/conversations/search', verifyToken, async (req, res) => {
     });
   }
 });
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
 
-// Start server
+  if (!token) {
+    return res.status(401).json({ error: 'No token provided' });
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your_jwt_secret');
+    req.user = decoded;
+    next();
+  } catch (err) {
+    return res.status(403).json({ error: 'Invalid token' });
+  }
+};
+app.get('/api/dashboard/overview', authenticateToken, async (req, res) => {
+  try {
+    // Find user by ID from token
+    const user = await User.findById(req.user.id).select('-password');
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // ✅ Fetch bookmarks for this user
+    const bookmarks = await Bookmark.find({ user: req.user.id })
+      .populate('project', 'title project_id') // project info
+      .sort({ createdAt: -1 })
+      .limit(5);
+
+    // ✅ Fetch bids for this user (as freelancer)
+    const bids = await Bid.find({ freelancer: user._id })
+      .populate('project', 'title') // get project title
+      .sort({ createdAt: -1 })
+      .limit(5);
+
+    res.status(200).json({
+      success: true,
+      user: {
+        id: user._id,
+        email: user.email,
+        role: user.role || user.userType
+      },
+      activities: [],  // placeholder until Activity model is ready
+      bookmarks: {
+        count: await Bookmark.countDocuments({ user: req.user.id }),
+        recent: bookmarks.map(b => ({
+          id: b._id,
+          projectId: b.project ? b.project._id : null,
+          projectTitle: b.project ? b.project.title : null,
+          userEmail: b.userEmail,
+          createdAt: b.createdAt
+        }))
+      },
+      bids: {
+        count: await Bid.countDocuments({ freelancer: user._id }),
+        recent: bids.map(b => ({
+          id: b._id,
+          projectId: b.project ? b.project._id : null,
+          projectTitle: b.project ? b.project.title : null,
+          amount: b.amount,
+          deliveryTime: b.deliveryTime,
+          status: b.status,
+          createdAt: b.createdAt
+        }))
+      }
+    });
+
+  } catch (error) {
+    console.error('Overview API error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message
+    });
+  }
+});
+app.get('/api/dashboard/analytics', verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    
+    // Ensure userId is converted to ObjectId properly
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid user ID'
+      });
+    }
+
+    const user = await User.findById(userId).select('role email');
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    let analytics = {};
+
+    if (user.role === 'freelancer') {
+      // Freelancer-specific analytics
+      analytics = await getFreelancerAnalytics(new mongoose.Types.ObjectId(userId));
+    } else if (user.role === 'client') {
+      // Client-specific analytics
+      analytics = await getClientAnalytics(user.email);
+    } else {
+      // Admin or other roles (basic analytics)
+      analytics = await getBasicAnalytics(new mongoose.Types.ObjectId(userId));
+    }
+
+    res.status(200).json({
+      success: true,
+      data: analytics
+    });
+
+  } catch (error) {
+    console.error('Dashboard analytics error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch dashboard analytics',
+      error: error.message
+    });
+  }
+});
+async function getFreelancerAnalytics(userId) {
+  // Get all bids by this freelancer
+  const bids = await Bid.find({ freelancer: userId })
+    .populate('project', 'title budget_from budget_to project_type')
+    .sort({ createdAt: -1 });
+
+  // Get accepted bids
+  const acceptedBids = bids.filter(bid => bid.status === 'accepted');
+  
+  // Get user profile data
+  const user = await User.findById(userId)
+    .select('skills hourlyRate profileCompleteness reviews createdAt')
+    .lean();
+
+  // Get conversations count
+  const conversationCount = await Conversation.countDocuments({
+    participants: userId
+  });
+
+  // Get unread messages count
+  const unreadMessages = await Message.countDocuments({
+    conversation: { $in: await Conversation.find({ participants: userId }).select('_id') },
+    sender: { $ne: userId },
+    read: false
+  });
+
+  // Calculate earnings data
+  const earningsData = calculateEarningsData(acceptedBids);
+  
+  // Calculate bid success rate
+  const bidSuccessRate = bids.length > 0 
+    ? Math.round((acceptedBids.length / bids.length) * 100) 
+    : 0;
+
+  // Calculate skills distribution
+  const skillsDistribution = calculateSkillsDistribution(bids);
+
+  // Calculate project type distribution
+  const projectTypeDistribution = calculateProjectTypeDistribution(bids);
+
+  return {
+    role: 'freelancer',
+    overview: {
+      totalBids: bids.length,
+      acceptedBids: acceptedBids.length,
+      bidSuccessRate,
+      totalEarnings: earningsData.totalEarnings,
+      averageEarningsPerProject: earningsData.averageEarnings,
+      profileCompleteness: user.profileCompleteness || 0,
+      rating: calculateAverageRating(user.reviews),
+      activeConversations: conversationCount,
+      unreadMessages
+    },
+    earnings: earningsData,
+    activity: {
+      bidsLast30Days: await getBidActivity(userId, 30),
+      earningsLast12Months: await getEarningsOverTime(userId, 12)
+    },
+    skills: {
+      topSkills: user.skills?.slice(0, 5) || [],
+      skillsDistribution,
+      mostProfitableSkills: getMostProfitableSkills(acceptedBids, user.skills || [])
+    },
+    projects: {
+      projectTypeDistribution,
+      averageProjectBudget: calculateAverageProjectBudget(bids),
+      completionRate: calculateProjectCompletionRate(userId)
+    },
+    performance: {
+      responseTime: await calculateAverageResponseTime(userId),
+      clientSatisfaction: calculateClientSatisfaction(user.reviews),
+      profileViews: 0 // Would need tracking implementation
+    }
+  };
+}
+async function getClientAnalytics(userEmail) {
+  // Get all projects by this client
+  const projects = await Project.find({ email: userEmail })
+    .sort({ createdAt: -1 });
+
+  // Get project IDs for queries
+  const projectIds = projects.map(p => p._id);
+
+  // Get all bids for client's projects
+  const bids = await Bid.find({ project: { $in: projectIds } })
+    .populate('freelancer', 'fullName hourlyRate skills')
+    .populate('project', 'title budget_from budget_to');
+
+  // Get accepted bids
+  const acceptedBids = bids.filter(bid => bid.status === 'accepted');
+
+  // Calculate spending data
+  const spendingData = calculateSpendingData(acceptedBids);
+
+  // Get conversations count
+  const conversationCount = await Conversation.countDocuments({
+    participants: { $in: await User.find({ email: userEmail }).select('_id') }
+  });
+
+  // Get unread messages count
+  const unreadMessages = await Message.countDocuments({
+    conversation: { 
+      $in: await Conversation.find({ 
+        participants: { $in: await User.find({ email: userEmail }).select('_id') } 
+      }).select('_id') 
+    },
+    sender: { $nin: await User.find({ email: userEmail }).select('_id') },
+    read: false
+  });
+
+  // Calculate freelancer stats
+  const freelancerStats = calculateFreelancerStats(bids);
+
+  return {
+    role: 'client',
+    overview: {
+      totalProjects: projects.length,
+      activeProjects: projects.length - acceptedBids.length, // Projects without accepted bids
+      completedProjects: acceptedBids.length,
+      totalSpent: spendingData.totalSpent,
+      averageProjectBudget: calculateAverageClientProjectBudget(projects),
+      averageBidsPerProject: projects.length > 0 ? Math.round(bids.length / projects.length) : 0,
+      activeConversations: conversationCount,
+      unreadMessages
+    },
+    spending: spendingData,
+    activity: {
+      projectsLast30Days: await getProjectActivity(userEmail, 30),
+      spendingLast12Months: await getSpendingOverTime(userEmail, 12)
+    },
+    freelancers: {
+      topFreelancers: getTopFreelancers(bids),
+      freelancerStats,
+      hiringPatterns: analyzeHiringPatterns(acceptedBids)
+    },
+    projects: {
+      projectTypeDistribution: calculateClientProjectTypeDistribution(projects),
+      budgetDistribution: calculateBudgetDistribution(projects),
+      averageTimeToHire: calculateAverageTimeToHire(projects, bids)
+    },
+    performance: {
+      projectCompletionRate: calculateClientProjectCompletionRate(projects, acceptedBids),
+      freelancerSatisfaction: calculateFreelancerSatisfaction(bids),
+      averageResponseTime: calculateAverageClientResponseTime(projects, bids)
+    }
+  };
+}
+async function getBasicAnalytics(userId) {
+  // Basic analytics for users with other roles
+  const user = await User.findById(userId)
+    .select('profileCompleteness reviews createdAt')
+    .lean();
+
+  return {
+    role: 'user',
+    overview: {
+      profileCompleteness: user.profileCompleteness || 0,
+      rating: calculateAverageRating(user.reviews),
+      memberSince: user.createdAt
+    }
+  };
+}
+function calculateEarningsData(acceptedBids) {
+  const totalEarnings = acceptedBids.reduce((sum, bid) => sum + bid.amount, 0);
+  const averageEarnings = acceptedBids.length > 0 
+    ? Math.round(totalEarnings / acceptedBids.length) 
+    : 0;
+
+  // Calculate earnings by month for the last 12 months
+  const monthlyEarnings = {};
+  const currentDate = new Date();
+  
+  for (let i = 11; i >= 0; i--) {
+    const date = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1);
+    const monthKey = date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+    monthlyEarnings[monthKey] = 0;
+  }
+
+  acceptedBids.forEach(bid => {
+    const monthKey = bid.createdAt.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+    if (monthlyEarnings.hasOwnProperty(monthKey)) {
+      monthlyEarnings[monthKey] += bid.amount;
+    }
+  });
+
+  return {
+    totalEarnings,
+    averageEarnings,
+    monthlyEarnings: Object.entries(monthlyEarnings).map(([month, amount]) => ({ month, amount })),
+    highestPayingProject: acceptedBids.length > 0 
+      ? acceptedBids.reduce((max, bid) => bid.amount > max.amount ? bid : max, acceptedBids[0])
+      : null
+  };
+}
+function calculateSpendingData(acceptedBids) {
+  const totalSpent = acceptedBids.reduce((sum, bid) => sum + bid.amount, 0);
+  const averageSpending = acceptedBids.length > 0 
+    ? Math.round(totalSpent / acceptedBids.length) 
+    : 0;
+
+  // Calculate spending by month for the last 12 months
+  const monthlySpending = {};
+  const currentDate = new Date();
+  
+  for (let i = 11; i >= 0; i--) {
+    const date = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1);
+    const monthKey = date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+    monthlySpending[monthKey] = 0;
+  }
+
+  acceptedBids.forEach(bid => {
+    const monthKey = bid.createdAt.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+    if (monthlySpending.hasOwnProperty(monthKey)) {
+      monthlySpending[monthKey] += bid.amount;
+    }
+  });
+
+  return {
+    totalSpent,
+    averageSpending,
+    monthlySpending: Object.entries(monthlySpending).map(([month, amount]) => ({ month, amount })),
+    highestPaidProject: acceptedBids.length > 0 
+      ? acceptedBids.reduce((max, bid) => bid.amount > max.amount ? bid : max, acceptedBids[0])
+      : null
+  };
+}
+function calculateAverageRating(reviews) {
+  if (!reviews || reviews.length === 0) return 0;
+  const total = reviews.reduce((sum, review) => sum + review.rating, 0);
+  return parseFloat((total / reviews.length).toFixed(1));
+}
+function calculateSkillsDistribution(bids) {
+  const skillsMap = {};
+  
+  bids.forEach(bid => {
+    if (bid.project && bid.project.req_skills) {
+      bid.project.req_skills.forEach(skill => {
+        skillsMap[skill] = (skillsMap[skill] || 0) + 1;
+      });
+    }
+  });
+
+  return Object.entries(skillsMap)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .map(([skill, count]) => ({ skill, count }));
+}
+function calculateProjectTypeDistribution(bids) {
+  const typeMap = {};
+  
+  bids.forEach(bid => {
+    if (bid.project && bid.project.project_type) {
+      const type = bid.project.project_type;
+      typeMap[type] = (typeMap[type] || 0) + 1;
+    }
+  });
+
+  return Object.entries(typeMap)
+    .sort((a, b) => b[1] - a[1])
+    .map(([type, count]) => ({ type, count }));
+}
+function calculateAverageProjectBudget(bids) {
+  const projectsWithBudget = bids.filter(bid => bid.project && bid.project.budget_from && bid.project.budget_to);
+  if (projectsWithBudget.length === 0) return 0;
+  
+  const total = projectsWithBudget.reduce((sum, bid) => {
+    return sum + ((bid.project.budget_from + bid.project.budget_to) / 2);
+  }, 0);
+  
+  return Math.round(total / projectsWithBudget.length);
+}
+async function calculateProjectCompletionRate(userId) {
+  const acceptedBids = await Bid.countDocuments({ 
+    freelancer: userId, 
+    status: 'accepted' 
+  });
+  
+  const completedBids = await Bid.countDocuments({ 
+    freelancer: userId, 
+    status: 'completed' // Would need to add this status
+  });
+  
+  if (acceptedBids === 0) return 0;
+  return Math.round((completedBids / acceptedBids) * 100);
+}
+async function calculateAverageResponseTime(userId) {
+  // This would need message timestamps and project posting times
+  // Simplified version - average time between project posting and bid submission
+  const bids = await Bid.find({ freelancer: userId })
+    .populate('project', 'createdAt')
+    .sort({ createdAt: -1 })
+    .limit(50);
+
+  if (bids.length === 0) return 'N/A';
+
+  const totalResponseTime = bids.reduce((sum, bid) => {
+    if (bid.project && bid.project.createdAt && bid.createdAt) {
+      return sum + (bid.createdAt - bid.project.createdAt);
+    }
+    return sum;
+  }, 0);
+
+  const averageMs = totalResponseTime / bids.length;
+  return formatDuration(averageMs);
+}
+function calculateClientSatisfaction(reviews) {
+  if (!reviews || reviews.length === 0) return 0;
+  const positiveReviews = reviews.filter(r => r.rating >= 4).length;
+  return Math.round((positiveReviews / reviews.length) * 100);
+}
+function getMostProfitableSkills(acceptedBids, userSkills) {
+  const skillEarnings = {};
+  
+  acceptedBids.forEach(bid => {
+    if (bid.project && bid.project.req_skills) {
+      bid.project.req_skills.forEach(skill => {
+        if (userSkills.includes(skill)) {
+          skillEarnings[skill] = (skillEarnings[skill] || 0) + bid.amount;
+        }
+      });
+    }
+  });
+
+  return Object.entries(skillEarnings)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([skill, earnings]) => ({ skill, earnings }));
+}
+async function getBidActivity(userId, days) {
+  const startDate = new Date();
+  startDate.setDate(startDate.getDate() - days);
+  
+  const bids = await Bid.aggregate([
+    {
+      $match: {
+        freelancer: new mongoose.Types.ObjectId(userId), // Add 'new' keyword here
+        createdAt: { $gte: startDate }
+      }
+    },
+    {
+      $group: {
+        _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+        count: { $sum: 1 }
+      }
+    },
+    { $sort: { _id: 1 } }
+  ]);
+
+  return bids;
+}
+async function getEarningsOverTime(userId, months) {
+  const startDate = new Date();
+  startDate.setMonth(startDate.getMonth() - months);
+  
+  const earnings = await Bid.aggregate([
+    {
+      $match: {
+        freelancer: new mongoose.Types.ObjectId(userId), // Add 'new' keyword here
+        status: 'accepted',
+        createdAt: { $gte: startDate }
+      }
+    },
+    {
+      $group: {
+        _id: { $dateToString: { format: "%Y-%m", date: "$createdAt" } },
+        amount: { $sum: "$amount" }
+      }
+    },
+    { $sort: { _id: 1 } }
+  ]);
+
+  return earnings;
+}
+function calculateAverageClientProjectBudget(projects) {
+  if (projects.length === 0) return 0;
+  
+  const total = projects.reduce((sum, project) => {
+    return sum + ((project.budget_from + project.budget_to) / 2);
+  }, 0);
+  
+  return Math.round(total / projects.length);
+}
+function calculateClientProjectTypeDistribution(projects) {
+  const typeMap = {};
+  
+  projects.forEach(project => {
+    const type = project.project_type;
+    typeMap[type] = (typeMap[type] || 0) + 1;
+  });
+
+  return Object.entries(typeMap)
+    .sort((a, b) => b[1] - a[1])
+    .map(([type, count]) => ({ type, count }));
+}
+function calculateBudgetDistribution(projects) {
+  const ranges = [
+    { range: '0-500', min: 0, max: 500, count: 0 },
+    { range: '501-1000', min: 501, max: 1000, count: 0 },
+    { range: '1001-5000', min: 1001, max: 5000, count: 0 },
+    { range: '5000+', min: 5001, max: Infinity, count: 0 }
+  ];
+
+  projects.forEach(project => {
+    const avgBudget = (project.budget_from + project.budget_to) / 2;
+    for (const range of ranges) {
+      if (avgBudget >= range.min && avgBudget <= range.max) {
+        range.count++;
+        break;
+      }
+    }
+  });
+
+  return ranges;
+}
+function calculateFreelancerStats(bids) {
+  const freelancerMap = {};
+  
+  bids.forEach(bid => {
+    if (bid.freelancer) {
+      const freelancerId = bid.freelancer._id || bid.freelancer;
+      if (!freelancerMap[freelancerId]) {
+        freelancerMap[freelancerId] = {
+          id: freelancerId,
+          name: bid.freelancer.fullName,
+          bids: 0,
+          accepted: 0,
+          totalAmount: 0
+        };
+      }
+      freelancerMap[freelancerId].bids++;
+      if (bid.status === 'accepted') {
+        freelancerMap[freelancerId].accepted++;
+        freelancerMap[freelancerId].totalAmount += bid.amount;
+      }
+    }
+  });
+
+  return Object.values(freelancerMap)
+    .sort((a, b) => b.bids - a.bids)
+    .slice(0, 10);
+}
+function getTopFreelancers(bids) {
+  const acceptedBids = bids.filter(bid => bid.status === 'accepted');
+  const freelancerMap = {};
+  
+  acceptedBids.forEach(bid => {
+    if (bid.freelancer) {
+      const freelancerId = bid.freelancer._id || bid.freelancer;
+      if (!freelancerMap[freelancerId]) {
+        freelancerMap[freelancerId] = {
+          id: freelancerId,
+          name: bid.freelancer.fullName,
+          projects: 0,
+          totalEarned: 0,
+          skills: bid.freelancer.skills || [],
+          hourlyRate: bid.freelancer.hourlyRate || 0
+        };
+      }
+      freelancerMap[freelancerId].projects++;
+      freelancerMap[freelancerId].totalEarned += bid.amount;
+    }
+  });
+
+  return Object.values(freelancerMap)
+    .sort((a, b) => b.totalEarned - a.totalEarned)
+    .slice(0, 5);
+}
+function analyzeHiringPatterns(acceptedBids) {
+  if (acceptedBids.length === 0) return {};
+  
+  // Calculate average time to accept a bid
+  const totalTime = acceptedBids.reduce((sum, bid) => {
+    return sum + (bid.updatedAt - bid.createdAt);
+  }, 0);
+  const averageTimeMs = totalTime / acceptedBids.length;
+  
+  // Calculate bid amount vs project budget ratio
+  const budgetRatios = acceptedBids.map(bid => {
+    if (bid.project && bid.project.budget_from && bid.project.budget_to) {
+      const avgBudget = (bid.project.budget_from + bid.project.budget_to) / 2;
+      return bid.amount / avgBudget;
+    }
+    return 1;
+  });
+  const averageRatio = budgetRatios.reduce((sum, ratio) => sum + ratio, 0) / budgetRatios.length;
+  
+  return {
+    averageTimeToAccept: formatDuration(averageTimeMs),
+    averageBidVsBudgetRatio: averageRatio.toFixed(2),
+    mostCommonSkills: calculateSkillsDistribution(acceptedBids).slice(0, 3)
+  };
+}
+async function calculateAverageTimeToHire(projects, bids) {
+  if (projects.length === 0) return 'N/A';
+  
+  const projectTimes = [];
+  
+  for (const project of projects) {
+    const projectBids = bids.filter(bid => bid.project.equals(project._id));
+    if (projectBids.length > 0) {
+      const firstBidTime = projectBids.reduce((min, bid) => 
+        bid.createdAt < min ? bid.createdAt : min, 
+        projectBids[0].createdAt
+      );
+      const acceptedBid = projectBids.find(bid => bid.status === 'accepted');
+      if (acceptedBid) {
+        projectTimes.push(acceptedBid.createdAt - firstBidTime);
+      }
+    }
+  }
+  
+  if (projectTimes.length === 0) return 'N/A';
+  const averageMs = projectTimes.reduce((sum, time) => sum + time, 0) / projectTimes.length;
+  return formatDuration(averageMs);
+}
+function calculateClientProjectCompletionRate(projects, acceptedBids) {
+  // This would need a 'completed' status for projects
+  // Simplified version - percentage of projects with accepted bids
+  if (projects.length === 0) return 0;
+  return Math.round((acceptedBids.length / projects.length) * 100);
+}
+function calculateFreelancerSatisfaction(bids) {
+  // This would need feedback from freelancers
+  // Simplified version - percentage of bids that were accepted
+  if (bids.length === 0) return 0;
+  const accepted = bids.filter(bid => bid.status === 'accepted').length;
+  return Math.round((accepted / bids.length) * 100);
+}
+async function calculateAverageClientResponseTime(projects, bids) {
+  if (projects.length === 0) return 'N/A';
+  
+  const responseTimes = [];
+  
+  for (const project of projects) {
+    const projectBids = bids.filter(bid => bid.project.equals(project._id));
+    if (projectBids.length > 0) {
+      const firstBidTime = projectBids.reduce((min, bid) => 
+        bid.createdAt < min ? bid.createdAt : min, 
+        projectBids[0].createdAt
+      );
+      const acceptedBid = projectBids.find(bid => bid.status === 'accepted');
+      if (acceptedBid) {
+        responseTimes.push(acceptedBid.createdAt - firstBidTime);
+      }
+    }
+  }
+  
+  if (responseTimes.length === 0) return 'N/A';
+  const averageMs = responseTimes.reduce((sum, time) => sum + time, 0) / responseTimes.length;
+  return formatDuration(averageMs);
+}
+async function getProjectActivity(userEmail, days) {
+  const startDate = new Date();
+  startDate.setDate(startDate.getDate() - days);
+  
+  const projects = await Project.aggregate([
+    {
+      $match: {
+        email: userEmail,
+        createdAt: { $gte: startDate }
+      }
+    },
+    {
+      $group: {
+        _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+        count: { $sum: 1 }
+      }
+    },
+    { $sort: { _id: 1 } }
+  ]);
+
+  return projects;
+}
+async function getSpendingOverTime(userEmail, months) {
+  const startDate = new Date();
+  startDate.setMonth(startDate.getMonth() - months);
+  
+  const spending = await Bid.aggregate([
+    {
+      $lookup: {
+        from: 'projects',
+        localField: 'project',
+        foreignField: '_id',
+        as: 'project'
+      }
+    },
+    { $unwind: '$project' },
+    {
+      $match: {
+        'project.email': userEmail,
+        status: 'accepted',
+        createdAt: { $gte: startDate }
+      }
+    },
+    {
+      $group: {
+        _id: { $dateToString: { format: "%Y-%m", date: "$createdAt" } },
+        amount: { $sum: "$amount" }
+      }
+    },
+    { $sort: { _id: 1 } }
+  ]);
+
+  return spending;
+}
+function formatDuration(ms) {
+  const seconds = Math.floor(ms / 1000);
+  if (seconds < 60) return `${seconds} seconds`;
+  
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} minutes`;
+  
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} hours`;
+  
+  const days = Math.floor(hours / 24);
+  return `${days} days`;
+}
+const taskStorage = multer.diskStorage({
+  destination: function(req, file, cb) {
+    const uploadPath = 'uploads/tasks';
+    if (!fs.existsSync(uploadPath)) {
+      fs.mkdirSync(uploadPath, { recursive: true });
+    }
+    cb(null, uploadPath);
+  },
+  filename: function(req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, uniqueSuffix + path.extname(file.originalname));
+  }
+});
+const taskUpload = multer({ 
+  storage: taskStorage,
+  limits: { 
+    fileSize: 10 * 1024 * 1024 // 10MB max for task attachments
+  },
+  fileFilter: (req, file, cb) => {
+    const allowedFileTypes = /jpeg|jpg|png|pdf|doc|docx|zip|rar|txt/;
+    const extname = allowedFileTypes.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = allowedFileTypes.test(file.mimetype);
+
+    if (extname && mimetype) {
+      return cb(null, true);
+    } else {
+      cb(new Error('Only documents, images, and archives are allowed'));
+    }
+  }
+});
+app.post('/api/tasks', verifyToken, taskUpload.array('attachments', 5), async (req, res) => {
+  try {
+    const { projectId, bidId, title, description, priority, dueDate, assignedTo } = req.body;
+
+    // Validate required fields
+    if (!projectId || !bidId || !title || !assignedTo) {
+      return res.status(400).json({
+        success: false,
+        message: 'Project ID, Bid ID, Title, and Assigned To are required'
+      });
+    }
+
+    // Verify the project exists and user has access
+    const project = await Project.findById(projectId);
+    if (!project) {
+      return res.status(404).json({
+        success: false,
+        message: 'Project not found'
+      });
+    }
+
+    // Verify the bid exists and is accepted
+    const bid = await Bid.findById(bidId);
+    if (!bid || bid.status !== 'accepted') {
+      return res.status(400).json({
+        success: false,
+        message: 'Bid not found or not accepted'
+      });
+    }
+
+    // Verify the assigned user exists
+    const assignedUser = await User.findById(assignedTo);
+    if (!assignedUser) {
+      return res.status(404).json({
+        success: false,
+        message: 'Assigned user not found'
+      });
+    }
+
+    // Check if the current user is the project owner or has permission
+    const currentUser = await User.findById(req.user.id);
+    if (project.email !== currentUser.email && currentUser.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to create tasks for this project'
+      });
+    }
+
+    // Process attachments
+    const attachments = req.files ? req.files.map(file => ({
+      filename: file.filename,
+      originalName: file.originalname,
+      path: `/uploads/tasks/${file.filename}`
+    })) : [];
+
+    // Create the task
+    const task = await Task.create({
+      project: projectId,
+      bid: bidId,
+      title,
+      description,
+      priority,
+      dueDate: dueDate ? new Date(dueDate) : null,
+      assignedTo,
+      assignedBy: req.user.id,
+      attachments
+    });
+
+    // Populate the task with user details
+    await task.populate([
+      { path: 'assignedTo', select: 'fullName email profilePhoto' },
+      { path: 'assignedBy', select: 'fullName email profilePhoto' }
+    ]);
+
+    // Emit socket event for real-time updates
+    io.to(`user_${assignedTo}`).emit('new_task', {
+      task,
+      message: `New task assigned: ${title}`
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'Task created successfully',
+      data: task
+    });
+
+  } catch (error) {
+    console.error('Error creating task:', error);
+    
+    // Delete uploaded files if there was an error
+    if (req.files) {
+      req.files.forEach(file => {
+        if (fs.existsSync(file.path)) {
+          try {
+            fs.unlinkSync(file.path);
+          } catch (deleteErr) {
+            console.error('Error deleting uploaded file:', deleteErr);
+          }
+        }
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: 'Failed to create task',
+      error: error.message
+    });
+  }
+});
+app.post('/api/freelancer/projects', async (req, res) =>{
+  try {
+    const { userId } = req.body;
+
+    // Verify user is a freelancer
+    const user = await User.findById(userId);
+    if (!user || user.role !== 'freelancer') {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. Only freelancers can access this endpoint.'
+      });
+    }
+
+    // Find accepted bids for the freelancer
+    const acceptedBids = await Bid.find({ 
+      freelancer: userId, 
+      status: 'accepted' 
+    }).populate('project');
+
+    // Extract unique projects from accepted bids
+    const projects = acceptedBids.map(bid => bid.project);
+
+    res.status(200).json({
+      success: true,
+      message: 'Accepted projects fetched successfully',
+      data: projects
+    });
+
+  } catch (error) {
+    console.error('Error fetching accepted projects:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch accepted projects',
+      error: error.message
+    });
+  }
+})
+app.get('/api/projects/:projectId/tasks', async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const { status, assignedTo } = req.query;
+
+    const project = await Project.findById(projectId);
+    if (!project) {
+      return res.status(404).json({ success: false, message: 'Project not found' });
+    }
+
+    // ✅ Removed req.user checks
+    const filter = { project: projectId };
+    if (status) filter.status = status;
+    if (assignedTo) filter.assignedTo = assignedTo;
+
+    const tasks = await Task.find(filter)
+      .populate('assignedTo', 'fullName email profilePhoto')
+      .populate('assignedBy', 'fullName email profilePhoto')
+      .populate('bid', 'amount deliveryTime')
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      message: 'Tasks fetched successfully',
+      data: tasks
+    });
+
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to fetch tasks', error: error.message });
+  }
+});
+app.get('/api/users/tasks', async (req, res) => {
+  try {
+    const { type = 'assigned', status, page = 1, limit = 10 } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    // Build filter based on task type
+    let filter = {};
+    
+    if (type === 'assigned') {
+      filter.assignedTo = req.user.id;
+    } else if (type === 'created') {
+      filter.assignedBy = req.user.id;
+    } else {
+      // Both assigned and created tasks
+      filter.$or = [
+        { assignedTo: req.user.id },
+        { assignedBy: req.user.id }
+      ];
+    }
+
+    if (status) {
+      filter.status = status;
+    }
+
+    // Get tasks with pagination
+    const tasks = await Task.find(filter)
+      .populate('project', 'title project_id')
+      .populate('assignedTo', 'fullName email profilePhoto')
+      .populate('assignedBy', 'fullName email profilePhoto')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit));
+
+    // Get total count for pagination
+    const totalTasks = await Task.countDocuments(filter);
+
+    res.status(200).json({
+      success: true,
+      message: 'Tasks fetched successfully',
+      data: tasks,
+      pagination: {
+        currentPage: parseInt(page),
+        totalPages: Math.ceil(totalTasks / parseInt(limit)),
+        totalTasks,
+        tasksPerPage: parseInt(limit)
+      }
+    });
+
+  } catch (error) {
+    console.error('Error fetching user tasks:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch tasks',
+      error: error.message
+    });
+  }
+});
+app.get('/api/tasks/:taskId', async (req, res) => {
+  try {
+    const { taskId } = req.params;
+
+    const task = await Task.findById(taskId)
+      .populate('project', 'title description project_id')
+      .populate('bid', 'amount deliveryTime coverLetter')
+      .populate('assignedTo', 'fullName email profilePhone title skills')
+      .populate('assignedBy', 'fullName email profilePhone title')
+      .populate({
+        path: 'comments.user',
+        select: 'fullName email profilePhoto'
+      });
+
+    if (!task) {
+      return res.status(404).json({
+        success: false,
+        message: 'Task not found'
+      });
+    }
+
+    // 🚨 Removed access check (req.user), now it just returns the task
+    res.status(200).json({
+      success: true,
+      message: 'Task fetched successfully',
+      data: task
+    });
+
+  } catch (error) {
+    console.error('Error fetching task:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch task',
+      error: error.message
+    });
+  }
+});
+app.put('/api/tasks/:taskId/status', async (req, res) => {
+  try {
+    const { taskId } = req.params;
+    const { status, rejectedReason } = req.body;
+
+    if (!status) {
+      return res.status(400).json({
+        success: false,
+        message: 'Status is required'
+      });
+    }
+
+    const task = await Task.findById(taskId);
+    if (!task) {
+      return res.status(404).json({
+        success: false,
+        message: 'Task not found'
+      });
+    }
+
+    // ❌ Skipping permission checks since no req.user
+    // Directly allow status update
+
+    // Validate status transitions
+    const validTransitions = {
+      'pending': ['in_progress', 'rejected'],
+      'in_progress': ['completed', 'rejected'],
+      'completed': ['pending', 'rejected'], 
+      'rejected': ['pending', 'in_progress']
+    };
+
+    if (!validTransitions[task.status]?.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid status transition from ${task.status} to ${status}`
+      });
+    }
+
+    // Update task
+    task.status = status;
+
+    if (status === 'completed') {
+      task.completionProof = task.completionProof || {};
+      task.completionProof.submittedAt = new Date();
+    } else if (status === 'rejected' && rejectedReason) {
+      task.rejectedReason = rejectedReason;
+    } else if (status === 'approved') {
+      task.approvedAt = new Date();
+    }
+
+    await task.save();
+
+    // Just emit update without req.user
+    io.emit('task_updated', {
+      taskId: task._id,
+      status,
+      updatedBy: "system" // or task.assignedBy / assignedTo if you want
+    });
+
+    res.status(200).json({
+      success: true,
+      message: `Task status updated to ${status}`,
+      data: task
+    });
+
+  } catch (error) {
+    console.error('Error updating task status:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update task status',
+      error: error.message
+    });
+  }
+});
+app.post('/api/tasks/:taskId/comments', async (req, res) => {
+  try {
+    const { taskId } = req.params;
+    const { content } = req.body;
+
+    if (!content) {
+      return res.status(400).json({
+        success: false,
+        message: 'Comment content is required'
+      });
+    }
+
+    const task = await Task.findById(taskId);
+    if (!task) {
+      return res.status(404).json({
+        success: false,
+        message: 'Task not found'
+      });
+    }
+
+    // Check if user has access to the task
+    const currentUser = await User.findById(req.user.id);
+    const hasAccess = (
+      task.assignedTo.toString() === req.user.id ||
+      task.assignedBy.toString() === req.user.id ||
+      currentUser.role === 'admin'
+    );
+
+    if (!hasAccess) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to comment on this task'
+      });
+    }
+
+    // Add comment
+    task.comments.push({
+      user: req.user.id,
+      content
+    });
+
+    await task.save();
+
+    // Populate the new comment with user info
+    await task.populate({
+      path: 'comments.user',
+      select: 'fullName email profilePhoto'
+    });
+
+    const newComment = task.comments[task.comments.length - 1];
+
+    // Emit socket event for real-time updates
+    const otherUserId = task.assignedTo.toString() === req.user.id 
+      ? task.assignedBy 
+      : task.assignedTo;
+
+    io.to(`user_${otherUserId}`).emit('new_comment', {
+      taskId: task._id,
+      comment: newComment
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'Comment added successfully',
+      data: newComment
+    });
+
+  } catch (error) {
+    console.error('Error adding comment:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to add comment',
+      error: error.message
+    });
+  }
+});
+app.post('/api/tasks/:taskId/completion-proof', taskUpload.array('attachments', 5), async (req, res) => {
+  try {
+    const { taskId } = req.params;
+    const { description } = req.body;
+
+    const task = await Task.findById(taskId);
+    if (!task) {
+      return res.status(404).json({
+        success: false,
+        message: 'Task not found'
+      });
+    }
+
+    // Check if user is assigned to the task
+    if (task.assignedTo.toString() !== req.user.id) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only the assigned user can add completion proof'
+      });
+    }
+
+    // Process attachments
+    const attachments = req.files ? req.files.map(file => ({
+      filename: file.filename,
+      originalName: file.originalname,
+      path: `/uploads/tasks/${file.filename}`
+    })) : [];
+
+    // Update completion proof
+    task.completionProof = {
+      description: description || '',
+      attachments: [...(task.completionProof?.attachments || []), ...attachments],
+      submittedAt: new Date()
+    };
+
+    // Change status to completed if not already
+    if (task.status !== 'completed') {
+      task.status = 'completed';
+    }
+
+    await task.save();
+
+    // Emit socket event for real-time updates
+    io.to(`user_${task.assignedBy}`).emit('completion_proof_added', {
+      taskId: task._id,
+      proof: task.completionProof
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Completion proof added successfully',
+      data: task.completionProof
+    });
+
+  } catch (error) {
+    console.error('Error adding completion proof:', error);
+    
+    // Delete uploaded files if there was an error
+    if (req.files) {
+      req.files.forEach(file => {
+        if (fs.existsSync(file.path)) {
+          try {
+            fs.unlinkSync(file.path);
+          } catch (deleteErr) {
+            console.error('Error deleting uploaded file:', deleteErr);
+          }
+        }
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: 'Failed to add completion proof',
+      error: error.message
+    });
+  }
+});
+app.get('/api/tasks/statistics', async (req, res) => {
+  try {
+    const userId = req.user.id;
+    
+    const [assignedTasks, createdTasks] = await Promise.all([
+      // Tasks assigned to user
+      Task.aggregate([
+        { $match: { assignedTo: new mongoose.Types.ObjectId(userId) } },
+        { $group: { _id: '$status', count: { $sum: 1 } } }
+      ]),
+      
+      // Tasks created by user
+      Task.aggregate([
+        { $match: { assignedBy: new mongoose.Types.ObjectId(userId) } },
+        { $group: { _id: '$status', count: { $sum: 1 } } }
+      ])
+    ]);
+
+    // Format the results
+    const formatStats = (stats) => {
+      const statuses = ['pending', 'in_progress', 'completed', 'rejected'];
+      const result = {};
+      
+      statuses.forEach(status => {
+        const stat = stats.find(s => s._id === status);
+        result[status] = stat ? stat.count : 0;
+      });
+      
+      result.total = Object.values(result).reduce((sum, count) => sum + count, 0);
+      
+      return result;
+    };
+
+    res.status(200).json({
+      success: true,
+      data: {
+        assigned: formatStats(assignedTasks),
+        created: formatStats(createdTasks)
+      }
+    });
+
+  } catch (error) {
+    console.error('Error fetching task statistics:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch task statistics',
+      error: error.message
+    });
+  }
+});
+app.get('/user/:email', async (req, res) => {
+  try {
+    const { email } = req.params;
+    const { status, priority, sortBy = 'createdAt', sortOrder = 'desc' } = req.query;
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid email format'
+      });
+    }
+
+    // Find the user by email → fetch id, name, email
+    const user = await User.findOne({ email }).select('_id name email avatar');
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Build the query filter (tasks created/assigned by this user)
+    const filter = { assignedBy: user._id };
+
+    if (status) filter.status = status;
+    if (priority) filter.priority = priority;
+
+    // Build sort options
+    const sortOptions = {};
+    sortOptions[sortBy] = sortOrder === 'asc' ? 1 : -1;
+
+    // Fetch tasks with populated fields
+    const tasks = await Task.find(filter)
+      .populate({
+        path: 'project',
+        select: 'title description budget deadline client'
+      })
+      .populate({
+        path: 'bid',
+        select: 'amount proposedTimeline status'
+      })
+      .populate({
+        path: 'assignedBy',
+        select: 'name email avatar' // includes name
+      })
+      .populate({
+        path: 'assignedTo',
+        select: 'fullName email avatar' // ✅ includes name
+      })
+      .populate({
+        path: 'comments.user',
+        select: 'name avatar'
+      })
+      .sort(sortOptions)
+      .lean();
+
+    // Aggregate statistics → tasks assigned *to* this user
+    const stats = await Task.aggregate([
+      { $match: { assignedTo: user._id } },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: 1 },
+          completed: { $sum: { $cond: [{ $eq: ['$status', 'completed'] }, 1, 0] } },
+          inProgress: { $sum: { $cond: [{ $eq: ['$status', 'in_progress'] }, 1, 0] } },
+          pending: { $sum: { $cond: [{ $eq: ['$status', 'pending'] }, 1, 0] } },
+          rejected: { $sum: { $cond: [{ $eq: ['$status', 'rejected'] }, 1, 0] } },
+          highPriority: { $sum: { $cond: [{ $eq: ['$priority', 'high'] }, 1, 0] } },
+          mediumPriority: { $sum: { $cond: [{ $eq: ['$priority', 'medium'] }, 1, 0] } },
+          lowPriority: { $sum: { $cond: [{ $eq: ['$priority', 'low'] }, 1, 0] } },
+          overdue: {
+            $sum: {
+              $cond: [
+                {
+                  $and: [
+                    { $lt: ['$dueDate', new Date()] },
+                    { $ne: ['$status', 'completed'] }
+                  ]
+                },
+                1,
+                0
+              ]
+            }
+          }
+        }
+      }
+    ]);
+
+    const taskStats = stats.length > 0 ? stats[0] : {
+      total: 0,
+      completed: 0,
+      inProgress: 0,
+      pending: 0,
+      rejected: 0,
+      highPriority: 0,
+      mediumPriority: 0,
+      lowPriority: 0,
+      overdue: 0
+    };
+
+    // Response → includes name, email, avatar
+    res.status(200).json({
+      success: true,
+      message: 'Tasks retrieved successfully',
+      data: {
+        user: {
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          avatar: user.avatar
+        },
+        tasks,
+        stats: taskStats
+      }
+    });
+
+  } catch (error) {
+    console.error('Error fetching user tasks:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
