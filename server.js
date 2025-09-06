@@ -3791,11 +3791,22 @@ app.get('/api/tasks/:taskId', async (req, res) => {
     }
 
     // 🚨 Removed access check (req.user), now it just returns the task
+    // res.status(200).json({
+    //   success: true,
+    //   message: 'Task fetched successfully',
+    //   data: task
+    // });
     res.status(200).json({
-      success: true,
-      message: 'Task fetched successfully',
-      data: task
-    });
+  success: true,
+  message: 'Task fetched successfully',
+  data: {
+    ...task.toObject(),
+    attachments: task.attachments.map(att => ({
+      ...att.toObject(),
+      url: `${req.protocol}://${req.get('host')}${att.path}`
+    }))
+  }
+});
 
   } catch (error) {
     console.error('Error fetching task:', error);
