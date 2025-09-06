@@ -16,7 +16,7 @@ const PORT = process.env.PORT || 5000;
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: process.env.CLIENT_URL || ["http://localhost:3000", "http://localhost:5173"],
+    origin: process.env.CLIENT_URL || ["http://localhost:3000", "http://localhost:5173",'https://freelance-saa-s-jvxs.vercel.app'],
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
     credentials: true
   }
@@ -43,7 +43,7 @@ app.use(cookieParser());
 //   credentials: true
 // }));
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:5173', '*'],
+  origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:5173', 'https://freelance-saa-s-jvxs.vercel.app','*'],
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
@@ -109,10 +109,15 @@ const upload = multer({
 // Make uploads folder publicly accessible
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 // Connect to MongoDB
-mongoose.connect('mongodb://localhost:27017/freelance-platform', {
+// mongoose.connect('mongodb://localhost:27017/freelance-platform', {
+//   useNewUrlParser: true,
+//   useUnifiedTopology: true
+// })
+mongoose.connect('mongodb+srv://santhiraju32_db_user:ErW8GpGpfXEZwW97@cluster0.uxfnhgz.mongodb.net', {
   useNewUrlParser: true,
   useUnifiedTopology: true
 })
+
 .then(() => console.log('MongoDB connected successfully'))
 .catch(err => console.error('MongoDB connection error:', err));
 
