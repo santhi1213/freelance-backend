@@ -113,7 +113,7 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 //   useNewUrlParser: true,
 //   useUnifiedTopology: true
 // })
-mongoose.connect('mongodb+srv://santhiraju32_db_user:<db_password>@cluster0.uxfnhgz.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0', {
+mongoose.connect('mongodb+srv://santhiraju32_db_user:ErW8GpGpfXEZwW97@cluster0.uxfnhgz.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0', {
   useNewUrlParser: true,
   useUnifiedTopology: true
 })
