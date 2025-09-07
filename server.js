@@ -1152,110 +1152,110 @@ app.delete('/api/profile/photo', verifyToken, async (req, res) => {
   }
 });
 // Enhanced API endpoint to fetch all projects with user profile data
-app.get('/api/projects/with-profiles', async (req, res) => {
-  try {
-    // Fetch all projects sorted by creation date (latest first)
-    const projects = await Project.find().sort({ createdAt: -1 });
+// app.get('/api/projects/with-profiles', async (req, res) => {
+//   try {
+//     // Fetch all projects sorted by creation date (latest first)
+//     const projects = await Project.find().sort({ createdAt: -1 });
 
-    // If no projects found
-    if (!projects || projects.length === 0) {
-      return res.status(200).json({
-        success: true,
-        message: 'No projects found',
-        data: []
-      });
-    }
+//     // If no projects found
+//     if (!projects || projects.length === 0) {
+//       return res.status(200).json({
+//         success: true,
+//         message: 'No projects found',
+//         data: []
+//       });
+//     }
 
-    // Enhance each project with user profile data
-    const enhancedProjects = await Promise.all(
-      projects.map(async (project) => {
-        try {
-          // Find user by email from the project
-          const user = await User.findOne({ email: project.email })
-            .select('fullName profilePhoto reviews email title location skills');
+//     // Enhance each project with user profile data
+//     const enhancedProjects = await Promise.all(
+//       projects.map(async (project) => {
+//         try {
+//           // Find user by email from the project
+//           const user = await User.findOne({ email: project.email })
+//             .select('fullName profilePhoto reviews email title location skills');
 
-          // Calculate average rating from reviews
-          let averageRating = 0;
-          let totalReviews = 0;
+//           // Calculate average rating from reviews
+//           let averageRating = 0;
+//           let totalReviews = 0;
 
-          if (user && user.reviews && user.reviews.length > 0) {
-            const totalRating = user.reviews.reduce((sum, review) => sum + review.rating, 0);
-            totalReviews = user.reviews.length;
-            averageRating = (totalRating / totalReviews).toFixed(1);
-          }
+//           if (user && user.reviews && user.reviews.length > 0) {
+//             const totalRating = user.reviews.reduce((sum, review) => sum + review.rating, 0);
+//             totalReviews = user.reviews.length;
+//             averageRating = (totalRating / totalReviews).toFixed(1);
+//           }
 
-          // Convert project to object and add user data
-          const projectObj = project.toObject();
+//           // Convert project to object and add user data
+//           const projectObj = project.toObject();
 
-          return {
-            ...projectObj,
-            userProfile: user ? {
-              id: user._id,
-              fullName: user.fullName,
-              email: user.email,
-              title: user.title,
-              location: user.location,
-              skills: user.skills,
-              profilePhoto: user.profilePhoto,
-              rating: {
-                average: parseFloat(averageRating),
-                totalReviews: totalReviews
-              }
-            } : {
-              id: null,
-              fullName: 'Unknown User',
-              email: project.email,
-              title: null,
-              location: null,
-              skills: [],
-              profilePhoto: null,
-              rating: {
-                average: 0,
-                totalReviews: 0
-              }
-            }
-          };
-        } catch (userError) {
-          console.error(`Error fetching user data for project ${project._id}:`, userError);
+//           return {
+//             ...projectObj,
+//             userProfile: user ? {
+//               id: user._id,
+//               fullName: user.fullName,
+//               email: user.email,
+//               title: user.title,
+//               location: user.location,
+//               skills: user.skills,
+//               profilePhoto: user.profilePhoto,
+//               rating: {
+//                 average: parseFloat(averageRating),
+//                 totalReviews: totalReviews
+//               }
+//             } : {
+//               id: null,
+//               fullName: 'Unknown User',
+//               email: project.email,
+//               title: null,
+//               location: null,
+//               skills: [],
+//               profilePhoto: null,
+//               rating: {
+//                 average: 0,
+//                 totalReviews: 0
+//               }
+//             }
+//           };
+//         } catch (userError) {
+//           console.error(`Error fetching user data for project ${project._id}:`, userError);
 
-          // Return project with default user data if user fetch fails
-          const projectObj = project.toObject();
-          return {
-            ...projectObj,
-            userProfile: {
-              id: null,
-              fullName: 'Unknown User',
-              email: project.email,
-              title: null,
-              location: null,
-              skills: [],
-              profilePhoto: null,
-              rating: {
-                average: 0,
-                totalReviews: 0
-              }
-            }
-          };
-        }
-      })
-    );
+//           // Return project with default user data if user fetch fails
+//           const projectObj = project.toObject();
+//           return {
+//             ...projectObj,
+//             userProfile: {
+//               id: null,
+//               fullName: 'Unknown User',
+//               email: project.email,
+//               title: null,
+//               location: null,
+//               skills: [],
+//               profilePhoto: null,
+//               rating: {
+//                 average: 0,
+//                 totalReviews: 0
+//               }
+//             }
+//           };
+//         }
+//       })
+//     );
 
-    res.status(200).json({
-      success: true,
-      message: 'Projects fetched successfully',
-      data: enhancedProjects,
-      count: enhancedProjects.length
-    });
+//     res.status(200).json({
+//       success: true,
+//       message: 'Projects fetched successfully',
+//       data: enhancedProjects,
+//       count: enhancedProjects.length
+//     });
 
-  } catch (error) {
-    console.error('Error fetching projects with profiles:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch projects',
-      error: error.message
-    });
-  }
-});
+//   } catch (error) {
+//     console.error('Error fetching projects with profiles:', error);
+//     res.status(500).json({
+//       success: false,
+//       message: 'Failed to fetch projects',
+//       error: error.message
+//     });
+//   }
+// });
 // Alternative endpoint with pagination and filtering options
 app.get('/api/projects/enhanced', async (req, res) => {
   try {
