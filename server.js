@@ -10,13 +10,13 @@ const path = require('path');
 const fs = require('fs'); // ADD THIS - Missing fs import
 const http = require('http');
 const { Server } = require('socket.io');
-const cookieParser = require('cookie-parser'); 
+const cookieParser = require('cookie-parser');
 const app = express();
 const PORT = process.env.PORT || 5000;
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: process.env.CLIENT_URL || ["http://localhost:3000", "http://localhost:5173",'https://freelance-saa-s-jvxs.vercel.app'],
+    origin: process.env.CLIENT_URL || ["http://localhost:3000", "http://localhost:5173", 'https://freelance-saa-s-jvxs.vercel.app'],
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
     credentials: true
   }
@@ -43,7 +43,7 @@ app.use(cookieParser());
 //   credentials: true
 // }));
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:5173', 'https://freelance-saa-s-jvxs.vercel.app','*'],
+  origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:5173', 'https://freelance-saa-s-jvxs.vercel.app', '*'],
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
@@ -56,18 +56,18 @@ app.use((req, res, next) => {
   next();
 });
 const storage = multer.diskStorage({
-  destination: function(req, file, cb) {
+  destination: function (req, file, cb) {
     // Create specific folder for profile photos
     const uploadPath = file.fieldname === 'profilePhoto' ? 'uploads/profiles' : 'uploads';
-    
+
     // Ensure directory exists
     if (!fs.existsSync(uploadPath)) {
       fs.mkdirSync(uploadPath, { recursive: true });
     }
-    
+
     cb(null, uploadPath);
   },
-  filename: function(req, file, cb) {
+  filename: function (req, file, cb) {
     // Create unique filename with timestamp and original extension
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
     cb(null, uniqueSuffix + path.extname(file.originalname));
@@ -99,9 +99,9 @@ const fileFilter = (req, file, cb) => {
     }
   }
 };
-const upload = multer({ 
+const upload = multer({
   storage: storage,
-  limits: { 
+  limits: {
     fileSize: 5 * 1024 * 1024 // 5MB max for profile photos
   },
   fileFilter: fileFilter
@@ -118,8 +118,8 @@ mongoose.connect('mongodb+srv://santhiraju32_db_user:ErW8GpGpfXEZwW97@cluster0.u
   useUnifiedTopology: true
 })
 
-.then(() => console.log('MongoDB connected successfully'))
-.catch(err => console.error('MongoDB connection error:', err));
+  .then(() => console.log('MongoDB connected successfully'))
+  .catch(err => console.error('MongoDB connection error:', err));
 
 // UPDATED User Schema - Remove duplicate index
 const userSchema = new mongoose.Schema({
@@ -139,13 +139,13 @@ const userSchema = new mongoose.Schema({
     type: String,
     required: true
   },
-  
+
   // Profile Photo
   profilePhoto: {
     type: String, // Store the file path/URL
     default: null
   },
-  
+
   // Professional Info
   title: {
     type: String,
@@ -172,13 +172,13 @@ const userSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
-  
+
   // Skills
   skills: [{
     type: String,
     trim: true
   }],
-  
+
   // Languages
   languages: [{
     name: {
@@ -191,7 +191,7 @@ const userSchema = new mongoose.Schema({
       trim: true
     }
   }],
-  
+
   // Experience
   experience: [{
     company: {
@@ -211,7 +211,7 @@ const userSchema = new mongoose.Schema({
       trim: true
     }
   }],
-  
+
   // Education
   education: [{
     institution: {
@@ -227,7 +227,7 @@ const userSchema = new mongoose.Schema({
       trim: true
     }
   }],
-  
+
   // Certifications
   certifications: [{
     name: {
@@ -243,7 +243,7 @@ const userSchema = new mongoose.Schema({
       trim: true
     }
   }],
-  
+
   // Portfolio Projects
   portfolioProjects: [{
     name: {
@@ -263,7 +263,7 @@ const userSchema = new mongoose.Schema({
       trim: true
     }
   }],
-  
+
   // Reviews (you might want to create a separate Reviews model later)
   reviews: [{
     clientName: String,
@@ -279,11 +279,11 @@ const userSchema = new mongoose.Schema({
       default: Date.now
     }
   }],
-  
+
   // Account Info
   role: {
     type: String,
-    enum: ['user', 'admin','client','freelancer'],
+    enum: ['user', 'admin', 'client', 'freelancer'],
     default: 'user'
   },
   isVerified: {
@@ -300,10 +300,10 @@ userSchema.index({ 'skills': 1 });
 userSchema.index({ 'location': 1 });
 
 // Virtual for profile completion percentage
-userSchema.virtual('profileCompleteness').get(function() {
+userSchema.virtual('profileCompleteness').get(function () {
   let completedFields = 0;
   const totalFields = 10; // Adjust based on required fields
-  
+
   if (this.fullName) completedFields++;
   if (this.email) completedFields++;
   if (this.title) completedFields++;
@@ -314,7 +314,7 @@ userSchema.virtual('profileCompleteness').get(function() {
   if (this.experience && this.experience.length > 0) completedFields++;
   if (this.education && this.education.length > 0) completedFields++;
   if (this.hourlyRate) completedFields++;
-  
+
   return Math.round((completedFields / totalFields) * 100);
 });
 
@@ -322,11 +322,11 @@ userSchema.virtual('profileCompleteness').get(function() {
 userSchema.set('toJSON', { virtuals: true });
 
 // Hash password before saving
-userSchema.pre('save', async function(next) {
+userSchema.pre('save', async function (next) {
   if (!this.isModified('password')) {
     return next();
   }
-  
+
   try {
     const salt = await bcrypt.genSalt(10);
     this.password = await bcrypt.hash(this.password, salt);
@@ -337,7 +337,7 @@ userSchema.pre('save', async function(next) {
 });
 
 // Compare password method
-userSchema.methods.comparePassword = async function(candidatePassword) {
+userSchema.methods.comparePassword = async function (candidatePassword) {
   return await bcrypt.compare(candidatePassword, this.password);
 };
 
@@ -362,10 +362,10 @@ const projectSchema = new mongoose.Schema({
     default: "pending",
   },
   project_id: {
-  type: String,
-  required: true,
-  unique: true
-}
+    type: String,
+    required: true,
+    unique: true
+  }
 
 }, { timestamps: true });
 
@@ -472,7 +472,7 @@ const bidSchema = new mongoose.Schema({
   },
   freelancer: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',  
+    ref: 'User',
     required: true
   },
   amount: {
@@ -581,7 +581,7 @@ const Conversation = mongoose.model('Conversation', conversationSchema);
 const verifyToken = async (req, res, next) => {
   try {
     let token;
-    
+
     // Get token from cookies or headers
     if (req.cookies.token) {
       token = req.cookies.token;
@@ -599,7 +599,7 @@ const verifyToken = async (req, res, next) => {
 
     // Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your_jwt_secret');
-    
+
     // Check if user still exists
     const user = await User.findById(decoded.id);
     if (!user) {
@@ -614,7 +614,7 @@ const verifyToken = async (req, res, next) => {
       id: user._id,
       role: user.role
     };
-    
+
     next();
   } catch (error) {
     console.error('Auth middleware error:', error);
@@ -766,10 +766,10 @@ app.post('/api/post_project', async (req, res) => {
       req_skills
     } = req.body;
 
-    const project_id = uuidv4(); 
+    const project_id = uuidv4();
 
     const newProject = await Project.create({
-      project_id, 
+      project_id,
       title,
       description,
       budget_from,
@@ -821,7 +821,7 @@ app.post('/api/profile', verifyToken, upload.single('profilePhoto'), async (req,
 
     // All fields are optional - user can save partial profile
     const profileData = {};
-    
+
     if (name) profileData.fullName = name;
     if (email) profileData.email = email;
     if (profile_title) profileData.title = profile_title;
@@ -835,7 +835,7 @@ app.post('/api/profile', verifyToken, upload.single('profilePhoto'), async (req,
     if (req.file) {
       // Get current user to delete old profile photo
       const currentUser = await User.findById(req.user.id);
-      
+
       // Delete old profile photo if exists
       if (currentUser && currentUser.profilePhoto) {
         const oldPhotoPath = path.join(__dirname, currentUser.profilePhoto.replace('/uploads/', 'uploads/'));
@@ -848,7 +848,7 @@ app.post('/api/profile', verifyToken, upload.single('profilePhoto'), async (req,
           console.error('Error deleting old photo:', err);
         }
       }
-      
+
       // Save new profile photo path
       profileData.profilePhoto = `/uploads/profiles/${req.file.filename}`;
     }
@@ -931,7 +931,7 @@ app.post('/api/profile', verifyToken, upload.single('profilePhoto'), async (req,
 
   } catch (error) {
     console.error('Profile update error:', error);
-    
+
     // Delete uploaded file if there was an error
     if (req.file && fs.existsSync(req.file.path)) {
       try {
@@ -941,7 +941,7 @@ app.post('/api/profile', verifyToken, upload.single('profilePhoto'), async (req,
         console.error('Error deleting uploaded file:', deleteErr);
       }
     }
-    
+
     // Handle multer errors
     if (error instanceof multer.MulterError) {
       if (error.code === 'LIMIT_FILE_SIZE') {
@@ -955,7 +955,7 @@ app.post('/api/profile', verifyToken, upload.single('profilePhoto'), async (req,
         message: 'File upload error: ' + error.message
       });
     }
-    
+
     // Handle validation errors
     if (error.name === 'ValidationError') {
       const errors = Object.values(error.errors).map(err => err.message);
@@ -985,7 +985,7 @@ app.post('/api/profile', verifyToken, upload.single('profilePhoto'), async (req,
 app.get('/api/profile', verifyToken, async (req, res) => {
   try {
     const user = await User.findById(req.user.id).select('-password');
-    
+
     if (!user) {
       return res.status(404).json({
         success: false,
@@ -1013,7 +1013,7 @@ app.get('/api/profile', verifyToken, async (req, res) => {
 app.put('/api/profile', verifyToken, upload.single('profilePhoto'), async (req, res) => {
   try {
     const updates = req.body;
-    
+
     // Remove sensitive fields that shouldn't be updated via this endpoint
     delete updates.password;
     delete updates.role;
@@ -1023,7 +1023,7 @@ app.put('/api/profile', verifyToken, upload.single('profilePhoto'), async (req, 
     if (req.file) {
       // Get current user to delete old profile photo
       const currentUser = await User.findById(req.user.id);
-      
+
       // Delete old profile photo if exists
       if (currentUser && currentUser.profilePhoto) {
         const oldPhotoPath = path.join(__dirname, currentUser.profilePhoto.replace('/uploads/', 'uploads/'));
@@ -1036,7 +1036,7 @@ app.put('/api/profile', verifyToken, upload.single('profilePhoto'), async (req, 
           console.error('Error deleting old photo:', err);
         }
       }
-      
+
       // Add new profile photo path to updates
       updates.profilePhoto = `/uploads/profiles/${req.file.filename}`;
     }
@@ -1067,7 +1067,7 @@ app.put('/api/profile', verifyToken, upload.single('profilePhoto'), async (req, 
 
   } catch (error) {
     console.error('Profile update error:', error);
-    
+
     // Delete uploaded file if there was an error
     if (req.file && fs.existsSync(req.file.path)) {
       try {
@@ -1077,7 +1077,7 @@ app.put('/api/profile', verifyToken, upload.single('profilePhoto'), async (req, 
         console.error('Error deleting uploaded file:', deleteErr);
       }
     }
-    
+
     // Handle multer errors
     if (error instanceof multer.MulterError) {
       if (error.code === 'LIMIT_FILE_SIZE') {
@@ -1091,7 +1091,7 @@ app.put('/api/profile', verifyToken, upload.single('profilePhoto'), async (req, 
         message: 'File upload error: ' + error.message
       });
     }
-    
+
     if (error.name === 'ValidationError') {
       const errors = Object.values(error.errors).map(err => err.message);
       return res.status(400).json({
@@ -1112,7 +1112,7 @@ app.put('/api/profile', verifyToken, upload.single('profilePhoto'), async (req, 
 app.delete('/api/profile/photo', verifyToken, async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
-    
+
     if (!user) {
       return res.status(404).json({
         success: false,
@@ -1131,7 +1131,7 @@ app.delete('/api/profile/photo', verifyToken, async (req, res) => {
       } catch (err) {
         console.error('Error deleting photo file:', err);
       }
-      
+
       // Remove profilePhoto from user document
       user.profilePhoto = null;
       await user.save();
@@ -1156,7 +1156,7 @@ app.get('/api/projects/with-profiles', async (req, res) => {
   try {
     // Fetch all projects sorted by creation date (latest first)
     const projects = await Project.find().sort({ createdAt: -1 });
-    
+
     // If no projects found
     if (!projects || projects.length === 0) {
       return res.status(200).json({
@@ -1173,11 +1173,11 @@ app.get('/api/projects/with-profiles', async (req, res) => {
           // Find user by email from the project
           const user = await User.findOne({ email: project.email })
             .select('fullName profilePhoto reviews email title location skills');
-          
+
           // Calculate average rating from reviews
           let averageRating = 0;
           let totalReviews = 0;
-          
+
           if (user && user.reviews && user.reviews.length > 0) {
             const totalRating = user.reviews.reduce((sum, review) => sum + review.rating, 0);
             totalReviews = user.reviews.length;
@@ -1186,7 +1186,7 @@ app.get('/api/projects/with-profiles', async (req, res) => {
 
           // Convert project to object and add user data
           const projectObj = project.toObject();
-          
+
           return {
             ...projectObj,
             userProfile: user ? {
@@ -1217,7 +1217,7 @@ app.get('/api/projects/with-profiles', async (req, res) => {
           };
         } catch (userError) {
           console.error(`Error fetching user data for project ${project._id}:`, userError);
-          
+
           // Return project with default user data if user fetch fails
           const projectObj = project.toObject();
           return {
@@ -1273,17 +1273,17 @@ app.get('/api/projects/enhanced', async (req, res) => {
 
     // Build filter object
     const filter = {};
-    
+
     if (project_type) {
       filter.project_type = project_type;
     }
-    
+
     if (skills) {
       // Split skills by comma and create regex search
       const skillsArray = skills.split(',').map(skill => skill.trim());
       filter.req_skills = { $in: skillsArray.map(skill => new RegExp(skill, 'i')) };
     }
-    
+
     if (budget_min || budget_max) {
       filter.$and = [];
       if (budget_min) {
@@ -1303,7 +1303,7 @@ app.get('/api/projects/enhanced', async (req, res) => {
 
     // Get total count for pagination
     const totalProjects = await Project.countDocuments(filter);
-    
+
     // Fetch projects with filters, sorting, and pagination
     const projects = await Project.find(filter)
       .sort(sortObj)
@@ -1331,10 +1331,10 @@ app.get('/api/projects/enhanced', async (req, res) => {
         try {
           const user = await User.findOne({ email: project.email })
             .select('fullName profilePhoto reviews email title location skills hourlyRate');
-          
+
           let averageRating = 0;
           let totalReviews = 0;
-          
+
           if (user && user.reviews && user.reviews.length > 0) {
             const totalRating = user.reviews.reduce((sum, review) => sum + review.rating, 0);
             totalReviews = user.reviews.length;
@@ -1342,7 +1342,7 @@ app.get('/api/projects/enhanced', async (req, res) => {
           }
 
           const projectObj = project.toObject();
-          
+
           return {
             ...projectObj,
             userProfile: user ? {
@@ -1382,7 +1382,7 @@ app.get('/api/projects/enhanced', async (req, res) => {
           };
         } catch (userError) {
           console.error(`Error fetching user data for project ${project._id}:`, userError);
-          
+
           const projectObj = project.toObject();
           return {
             ...projectObj,
@@ -1435,103 +1435,214 @@ app.get('/api/projects/enhanced', async (req, res) => {
   }
 });
 // Get single project with user profile data
-app.get('/api/projects/:id/with-profile', async (req, res) => {
+// app.get('/api/projects/:id/with-profile', async (req, res) => {
+//   try {
+//     const { id } = req.params;
+
+//     // Validate project ID
+//     if (!mongoose.Types.ObjectId.isValid(id)) {
+//       return res.status(400).json({
+//         success: false,
+//         message: 'Invalid project ID'
+//       });
+//     }
+
+//     // Find the project
+//     const project = await Project.findById(id);
+
+//     if (!project) {
+//       return res.status(404).json({
+//         success: false,
+//         message: 'Project not found'
+//       });
+//     }
+
+//     // Find user by email from the project
+//     const user = await User.findOne({ email: project.email })
+//       .select('fullName profilePhoto reviews email title location skills hourlyRate bio availabilityPerWeek');
+
+//     // Calculate average rating from reviews
+//     let averageRating = 0;
+//     let totalReviews = 0;
+
+//     if (user && user.reviews && user.reviews.length > 0) {
+//       const totalRating = user.reviews.reduce((sum, review) => sum + review.rating, 0);
+//       totalReviews = user.reviews.length;
+//       averageRating = (totalRating / totalReviews).toFixed(1);
+//     }
+
+//     // Convert project to object and add user data
+//     const projectObj = project.toObject();
+
+//     const enhancedProject = {
+//       ...projectObj,
+//       userProfile: user ? {
+//         id: user._id,
+//         fullName: user.fullName,
+//         email: user.email,
+//         title: user.title,
+//         bio: user.bio,
+//         location: user.location,
+//         skills: user.skills,
+//         hourlyRate: user.hourlyRate,
+//         availabilityPerWeek: user.availabilityPerWeek,
+//         profilePhoto: user.profilePhoto,
+//         rating: {
+//           average: parseFloat(averageRating),
+//           totalReviews: totalReviews,
+//           reviews: user.reviews.map(review => ({
+//             clientName: review.clientName,
+//             clientAvatar: review.clientAvatar,
+//             rating: review.rating,
+//             comment: review.comment,
+//             date: review.date
+//           }))
+//         }
+//       } : {
+//         id: null,
+//         fullName: 'Unknown User',
+//         email: project.email,
+//         title: null,
+//         bio: null,
+//         location: null,
+//         skills: [],
+//         hourlyRate: null,
+//         availabilityPerWeek: null,
+//         profilePhoto: null,
+//         rating: {
+//           average: 0,
+//           totalReviews: 0,
+//           reviews: []
+//         }
+//       }
+//     };
+
+//     res.status(200).json({
+//       success: true,
+//       message: 'Project fetched successfully',
+//       data: enhancedProject
+//     });
+
+//   } catch (error) {
+//     console.error('Error fetching project with profile:', error);
+//     res.status(500).json({
+//       success: false,
+//       message: 'Failed to fetch project',
+//       error: error.message
+//     });
+//   }
+// });
+app.get('/api/projects/with-profiles', async (req, res) => {
   try {
-    const { id } = req.params;
+    const projects = await Project.find().sort({ createdAt: -1 });
 
-    // Validate project ID
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid project ID'
+    if (!projects || projects.length === 0) {
+      return res.status(200).json({
+        success: true,
+        message: 'No projects found',
+        data: []
       });
     }
 
-    // Find the project
-    const project = await Project.findById(id);
-    
-    if (!project) {
-      return res.status(404).json({
-        success: false,
-        message: 'Project not found'
-      });
-    }
+    const enhancedProjects = await Promise.all(
+      projects.map(async (project) => {
+        try {
+          const user = await User.findOne({ email: project.email })
+            .select('fullName profilePhoto reviews email title location skills');
 
-    // Find user by email from the project
-    const user = await User.findOne({ email: project.email })
-      .select('fullName profilePhoto reviews email title location skills hourlyRate bio availabilityPerWeek');
-    
-    // Calculate average rating from reviews
-    let averageRating = 0;
-    let totalReviews = 0;
-    
-    if (user && user.reviews && user.reviews.length > 0) {
-      const totalRating = user.reviews.reduce((sum, review) => sum + review.rating, 0);
-      totalReviews = user.reviews.length;
-      averageRating = (totalRating / totalReviews).toFixed(1);
-    }
+          let averageRating = 0;
+          let totalReviews = 0;
 
-    // Convert project to object and add user data
-    const projectObj = project.toObject();
-    
-    const enhancedProject = {
-      ...projectObj,
-      userProfile: user ? {
-        id: user._id,
-        fullName: user.fullName,
-        email: user.email,
-        title: user.title,
-        bio: user.bio,
-        location: user.location,
-        skills: user.skills,
-        hourlyRate: user.hourlyRate,
-        availabilityPerWeek: user.availabilityPerWeek,
-        profilePhoto: user.profilePhoto,
-        rating: {
-          average: parseFloat(averageRating),
-          totalReviews: totalReviews,
-          reviews: user.reviews.map(review => ({
-            clientName: review.clientName,
-            clientAvatar: review.clientAvatar,
-            rating: review.rating,
-            comment: review.comment,
-            date: review.date
-          }))
+          if (user && user.reviews && user.reviews.length > 0) {
+            const totalRating = user.reviews.reduce((sum, review) => sum + review.rating, 0);
+            totalReviews = user.reviews.length;
+            averageRating = (totalRating / totalReviews).toFixed(1);
+          }
+
+          // Fetch bids related to the project with freelancer details
+          const bids = await Bid.find({ project: project._id })
+            .populate('freelancer', 'fullName email profilePhoto title location skills hourlyRate reviews');
+
+          // Fetch tasks related to the project with assignedTo and assignedBy user details
+          const tasks = await Task.find({ project: project._id })
+            .populate('assignedTo', 'fullName email profilePhoto')
+            .populate('assignedBy', 'fullName email profilePhoto');
+
+          const projectObj = project.toObject();
+
+          return {
+            ...projectObj,
+            userProfile: user ? {
+              id: user._id,
+              fullName: user.fullName,
+              email: user.email,
+              title: user.title,
+              location: user.location,
+              skills: user.skills,
+              profilePhoto: user.profilePhoto,
+              rating: {
+                average: parseFloat(averageRating),
+                totalReviews: totalReviews
+              }
+            } : {
+              id: null,
+              fullName: 'Unknown User',
+              email: project.email,
+              title: null,
+              location: null,
+              skills: [],
+              profilePhoto: null,
+              rating: {
+                average: 0,
+                totalReviews: 0
+              }
+            },
+            bids,
+            tasks
+          };
+        } catch (userError) {
+          console.error(`Error fetching user or related data for project ${project._id}:`, userError);
+
+          const projectObj = project.toObject();
+          return {
+            ...projectObj,
+            userProfile: {
+              id: null,
+              fullName: 'Unknown User',
+              email: project.email,
+              title: null,
+              location: null,
+              skills: [],
+              profilePhoto: null,
+              rating: {
+                average: 0,
+                totalReviews: 0
+              }
+            },
+            bids: [],
+            tasks: []
+          };
         }
-      } : {
-        id: null,
-        fullName: 'Unknown User',
-        email: project.email,
-        title: null,
-        bio: null,
-        location: null,
-        skills: [],
-        hourlyRate: null,
-        availabilityPerWeek: null,
-        profilePhoto: null,
-        rating: {
-          average: 0,
-          totalReviews: 0,
-          reviews: []
-        }
-      }
-    };
+      })
+    );
 
     res.status(200).json({
       success: true,
-      message: 'Project fetched successfully',
-      data: enhancedProject
+      message: 'Projects fetched successfully with bids and tasks',
+      data: enhancedProjects,
+      count: enhancedProjects.length
     });
 
   } catch (error) {
-    console.error('Error fetching project with profile:', error);
+    console.error('Error fetching projects with profiles and related bids/tasks:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to fetch project',
+      message: 'Failed to fetch projects with related data',
       error: error.message
     });
   }
 });
+
 app.post('/api/projects/myBids', async (req, res) => {
   try {
     const { userId } = req.body;
@@ -1557,7 +1668,7 @@ app.post('/api/projects/myBids', async (req, res) => {
       bids.map(async (bid) => {
         // Fix: Use 'fullName' instead of 'name' as per your User schema
         const client = await User.findOne({ email: bid.project.email }, 'fullName email');
-        
+
         return {
           ...bid.toObject(),
           project: {
@@ -1617,7 +1728,7 @@ app.post('/api/bookmarks/toggle', async (req, res) => {
     if (existingBookmark) {
       // Remove bookmark if it exists
       await Bookmark.findByIdAndDelete(existingBookmark._id);
-      
+
       return res.status(200).json({
         success: true,
         message: "Project removed from bookmarks",
@@ -1646,7 +1757,7 @@ app.post('/api/bookmarks/toggle', async (req, res) => {
 
   } catch (error) {
     console.error("🔥 Error toggling bookmark:", error.message);
-    
+
     // Handle duplicate key error
     if (error.code === 11000) {
       return res.status(409).json({
@@ -1903,7 +2014,7 @@ app.post('/api/projects/place_bid', async (req, res) => {
         user: freelancerId,
         project: projectId
       });
-      
+
       if (removedBookmark) {
         console.log(`✅ Automatically removed bookmark for user ${freelancerId} on project ${projectId}`);
       }
@@ -2037,13 +2148,13 @@ app.get('/api/projects/my-projects/:userId', verifyToken, async (req, res) => {
             pending: enhancedBids.filter(bid => bid.status === 'pending').length,
             accepted: enhancedBids.filter(bid => bid.status === 'accepted').length,
             rejected: enhancedBids.filter(bid => bid.status === 'rejected').length,
-            averageBid: enhancedBids.length > 0 
+            averageBid: enhancedBids.length > 0
               ? (enhancedBids.reduce((sum, bid) => sum + bid.amount, 0) / enhancedBids.length).toFixed(2)
               : 0,
-            lowestBid: enhancedBids.length > 0 
+            lowestBid: enhancedBids.length > 0
               ? Math.min(...enhancedBids.map(bid => bid.amount))
               : 0,
-            highestBid: enhancedBids.length > 0 
+            highestBid: enhancedBids.length > 0
               ? Math.max(...enhancedBids.map(bid => bid.amount))
               : 0
           };
@@ -2132,8 +2243,8 @@ app.put('/api/bids/:bidId/status', async (req, res) => {
     // If bid is accepted, reject all other pending bids for the same project
     if (status === 'accepted') {
       const rejectedBids = await Bid.updateMany(
-        { 
-          project: bid.project._id, 
+        {
+          project: bid.project._id,
           _id: { $ne: bid._id },
           status: 'pending'
         },
@@ -2144,7 +2255,7 @@ app.put('/api/bids/:bidId/status', async (req, res) => {
 
       // For conversation creation, you'll need to get the project owner
       const projectOwner = await User.findOne({ email: bid.project.email });
-      
+
       if (projectOwner) {
         // Create a conversation between project owner and freelancer
         let conversation = await Conversation.findOne({
@@ -2206,22 +2317,22 @@ app.get('/api/conversations', verifyToken, async (req, res) => {
     const conversations = await Conversation.find({
       participants: req.user.id
     })
-    .populate({
-      path: 'participants',
-      select: 'fullName email profilePhoto title',
-      match: { _id: { $ne: req.user.id } } // Exclude current user
-    })
-    .populate({
-      path: 'project',
-      select: 'title project_id budget_from budget_to'
-    })
-    .populate({
-      path: 'lastMessage',
-      select: 'content createdAt sender read'
-    })
-    .sort({ updatedAt: -1 })
-    .skip(skip)
-    .limit(parseInt(limit));
+      .populate({
+        path: 'participants',
+        select: 'fullName email profilePhoto title',
+        match: { _id: { $ne: req.user.id } } // Exclude current user
+      })
+      .populate({
+        path: 'project',
+        select: 'title project_id budget_from budget_to'
+      })
+      .populate({
+        path: 'lastMessage',
+        select: 'content createdAt sender read'
+      })
+      .sort({ updatedAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit));
 
     // Count unread messages for each conversation
     const enhancedConversations = await Promise.all(
@@ -2399,7 +2510,7 @@ app.post('/api/conversations/:conversationId/messages', verifyToken, upload.sing
 
   } catch (error) {
     console.error('Error sending message:', error);
-    
+
     // Delete uploaded file if there was an error
     if (req.file && fs.existsSync(req.file.path)) {
       try {
@@ -2516,14 +2627,14 @@ app.get('/api/conversations/:conversationId', verifyToken, async (req, res) => {
       _id: conversationId,
       participants: req.user.id
     })
-    .populate({
-      path: 'participants',
-      select: 'fullName email profilePhoto title'
-    })
-    .populate({
-      path: 'project',
-      select: 'title project_id budget_from budget_to description req_skills'
-    });
+      .populate({
+        path: 'participants',
+        select: 'fullName email profilePhoto title'
+      })
+      .populate({
+        path: 'project',
+        select: 'title project_id budget_from budget_to description req_skills'
+      });
 
     if (!conversation) {
       return res.status(404).json({
@@ -2632,7 +2743,7 @@ io.on('connection', (socket) => {
   socket.on('task_update', async (data) => {
     try {
       const { taskId, updates } = data;
-      
+
       // Verify user has permission to update the task
       const task = await Task.findById(taskId);
       if (!task) return;
@@ -2718,34 +2829,34 @@ app.get('/api/conversations/search', verifyToken, async (req, res) => {
     const conversations = await Conversation.find({
       participants: req.user.id
     })
-    .populate({
-      path: 'participants',
-      select: 'fullName email profilePhoto title',
-      match: {
-        $and: [
-          { _id: { $ne: req.user.id } },
-          {
-            $or: [
-              { fullName: { $regex: query, $options: 'i' } },
-              { email: { $regex: query, $options: 'i' } },
-              { title: { $regex: query, $options: 'i' } }
-            ]
-          }
-        ]
-      }
-    })
-    .populate({
-      path: 'project',
-      select: 'title project_id',
-      match: {
-        title: { $regex: query, $options: 'i' }
-      }
-    })
-    .limit(parseInt(limit));
+      .populate({
+        path: 'participants',
+        select: 'fullName email profilePhoto title',
+        match: {
+          $and: [
+            { _id: { $ne: req.user.id } },
+            {
+              $or: [
+                { fullName: { $regex: query, $options: 'i' } },
+                { email: { $regex: query, $options: 'i' } },
+                { title: { $regex: query, $options: 'i' } }
+              ]
+            }
+          ]
+        }
+      })
+      .populate({
+        path: 'project',
+        select: 'title project_id',
+        match: {
+          title: { $regex: query, $options: 'i' }
+        }
+      })
+      .limit(parseInt(limit));
 
     // Filter out conversations where no matches were found
-    const filteredConversations = conversations.filter(conv => 
-      (conv.participants && conv.participants.length > 0) || 
+    const filteredConversations = conversations.filter(conv =>
+      (conv.participants && conv.participants.length > 0) ||
       (conv.project && conv.project.title)
     );
 
@@ -2847,7 +2958,7 @@ app.get('/api/dashboard/overview', authenticateToken, async (req, res) => {
 app.get('/api/dashboard/analytics', verifyToken, async (req, res) => {
   try {
     const userId = req.user.id;
-    
+
     // Ensure userId is converted to ObjectId properly
     if (!mongoose.Types.ObjectId.isValid(userId)) {
       return res.status(400).json({
@@ -2857,7 +2968,7 @@ app.get('/api/dashboard/analytics', verifyToken, async (req, res) => {
     }
 
     const user = await User.findById(userId).select('role email');
-    
+
     if (!user) {
       return res.status(404).json({
         success: false,
@@ -2900,7 +3011,7 @@ async function getFreelancerAnalytics(userId) {
 
   // Get accepted bids
   const acceptedBids = bids.filter(bid => bid.status === 'accepted');
-  
+
   // Get user profile data
   const user = await User.findById(userId)
     .select('skills hourlyRate profileCompleteness reviews createdAt')
@@ -2920,10 +3031,10 @@ async function getFreelancerAnalytics(userId) {
 
   // Calculate earnings data
   const earningsData = calculateEarningsData(acceptedBids);
-  
+
   // Calculate bid success rate
-  const bidSuccessRate = bids.length > 0 
-    ? Math.round((acceptedBids.length / bids.length) * 100) 
+  const bidSuccessRate = bids.length > 0
+    ? Math.round((acceptedBids.length / bids.length) * 100)
     : 0;
 
   // Calculate skills distribution
@@ -2993,10 +3104,10 @@ async function getClientAnalytics(userEmail) {
 
   // Get unread messages count
   const unreadMessages = await Message.countDocuments({
-    conversation: { 
-      $in: await Conversation.find({ 
-        participants: { $in: await User.find({ email: userEmail }).select('_id') } 
-      }).select('_id') 
+    conversation: {
+      $in: await Conversation.find({
+        participants: { $in: await User.find({ email: userEmail }).select('_id') }
+      }).select('_id')
     },
     sender: { $nin: await User.find({ email: userEmail }).select('_id') },
     read: false
@@ -3056,14 +3167,14 @@ async function getBasicAnalytics(userId) {
 }
 function calculateEarningsData(acceptedBids) {
   const totalEarnings = acceptedBids.reduce((sum, bid) => sum + bid.amount, 0);
-  const averageEarnings = acceptedBids.length > 0 
-    ? Math.round(totalEarnings / acceptedBids.length) 
+  const averageEarnings = acceptedBids.length > 0
+    ? Math.round(totalEarnings / acceptedBids.length)
     : 0;
 
   // Calculate earnings by month for the last 12 months
   const monthlyEarnings = {};
   const currentDate = new Date();
-  
+
   for (let i = 11; i >= 0; i--) {
     const date = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1);
     const monthKey = date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
@@ -3081,21 +3192,21 @@ function calculateEarningsData(acceptedBids) {
     totalEarnings,
     averageEarnings,
     monthlyEarnings: Object.entries(monthlyEarnings).map(([month, amount]) => ({ month, amount })),
-    highestPayingProject: acceptedBids.length > 0 
+    highestPayingProject: acceptedBids.length > 0
       ? acceptedBids.reduce((max, bid) => bid.amount > max.amount ? bid : max, acceptedBids[0])
       : null
   };
 }
 function calculateSpendingData(acceptedBids) {
   const totalSpent = acceptedBids.reduce((sum, bid) => sum + bid.amount, 0);
-  const averageSpending = acceptedBids.length > 0 
-    ? Math.round(totalSpent / acceptedBids.length) 
+  const averageSpending = acceptedBids.length > 0
+    ? Math.round(totalSpent / acceptedBids.length)
     : 0;
 
   // Calculate spending by month for the last 12 months
   const monthlySpending = {};
   const currentDate = new Date();
-  
+
   for (let i = 11; i >= 0; i--) {
     const date = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1);
     const monthKey = date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
@@ -3113,7 +3224,7 @@ function calculateSpendingData(acceptedBids) {
     totalSpent,
     averageSpending,
     monthlySpending: Object.entries(monthlySpending).map(([month, amount]) => ({ month, amount })),
-    highestPaidProject: acceptedBids.length > 0 
+    highestPaidProject: acceptedBids.length > 0
       ? acceptedBids.reduce((max, bid) => bid.amount > max.amount ? bid : max, acceptedBids[0])
       : null
   };
@@ -3125,7 +3236,7 @@ function calculateAverageRating(reviews) {
 }
 function calculateSkillsDistribution(bids) {
   const skillsMap = {};
-  
+
   bids.forEach(bid => {
     if (bid.project && bid.project.req_skills) {
       bid.project.req_skills.forEach(skill => {
@@ -3141,7 +3252,7 @@ function calculateSkillsDistribution(bids) {
 }
 function calculateProjectTypeDistribution(bids) {
   const typeMap = {};
-  
+
   bids.forEach(bid => {
     if (bid.project && bid.project.project_type) {
       const type = bid.project.project_type;
@@ -3156,24 +3267,24 @@ function calculateProjectTypeDistribution(bids) {
 function calculateAverageProjectBudget(bids) {
   const projectsWithBudget = bids.filter(bid => bid.project && bid.project.budget_from && bid.project.budget_to);
   if (projectsWithBudget.length === 0) return 0;
-  
+
   const total = projectsWithBudget.reduce((sum, bid) => {
     return sum + ((bid.project.budget_from + bid.project.budget_to) / 2);
   }, 0);
-  
+
   return Math.round(total / projectsWithBudget.length);
 }
 async function calculateProjectCompletionRate(userId) {
-  const acceptedBids = await Bid.countDocuments({ 
-    freelancer: userId, 
-    status: 'accepted' 
+  const acceptedBids = await Bid.countDocuments({
+    freelancer: userId,
+    status: 'accepted'
   });
-  
-  const completedBids = await Bid.countDocuments({ 
-    freelancer: userId, 
+
+  const completedBids = await Bid.countDocuments({
+    freelancer: userId,
     status: 'completed' // Would need to add this status
   });
-  
+
   if (acceptedBids === 0) return 0;
   return Math.round((completedBids / acceptedBids) * 100);
 }
@@ -3204,7 +3315,7 @@ function calculateClientSatisfaction(reviews) {
 }
 function getMostProfitableSkills(acceptedBids, userSkills) {
   const skillEarnings = {};
-  
+
   acceptedBids.forEach(bid => {
     if (bid.project && bid.project.req_skills) {
       bid.project.req_skills.forEach(skill => {
@@ -3223,7 +3334,7 @@ function getMostProfitableSkills(acceptedBids, userSkills) {
 async function getBidActivity(userId, days) {
   const startDate = new Date();
   startDate.setDate(startDate.getDate() - days);
-  
+
   const bids = await Bid.aggregate([
     {
       $match: {
@@ -3245,7 +3356,7 @@ async function getBidActivity(userId, days) {
 async function getEarningsOverTime(userId, months) {
   const startDate = new Date();
   startDate.setMonth(startDate.getMonth() - months);
-  
+
   const earnings = await Bid.aggregate([
     {
       $match: {
@@ -3267,16 +3378,16 @@ async function getEarningsOverTime(userId, months) {
 }
 function calculateAverageClientProjectBudget(projects) {
   if (projects.length === 0) return 0;
-  
+
   const total = projects.reduce((sum, project) => {
     return sum + ((project.budget_from + project.budget_to) / 2);
   }, 0);
-  
+
   return Math.round(total / projects.length);
 }
 function calculateClientProjectTypeDistribution(projects) {
   const typeMap = {};
-  
+
   projects.forEach(project => {
     const type = project.project_type;
     typeMap[type] = (typeMap[type] || 0) + 1;
@@ -3308,7 +3419,7 @@ function calculateBudgetDistribution(projects) {
 }
 function calculateFreelancerStats(bids) {
   const freelancerMap = {};
-  
+
   bids.forEach(bid => {
     if (bid.freelancer) {
       const freelancerId = bid.freelancer._id || bid.freelancer;
@@ -3336,7 +3447,7 @@ function calculateFreelancerStats(bids) {
 function getTopFreelancers(bids) {
   const acceptedBids = bids.filter(bid => bid.status === 'accepted');
   const freelancerMap = {};
-  
+
   acceptedBids.forEach(bid => {
     if (bid.freelancer) {
       const freelancerId = bid.freelancer._id || bid.freelancer;
@@ -3361,13 +3472,13 @@ function getTopFreelancers(bids) {
 }
 function analyzeHiringPatterns(acceptedBids) {
   if (acceptedBids.length === 0) return {};
-  
+
   // Calculate average time to accept a bid
   const totalTime = acceptedBids.reduce((sum, bid) => {
     return sum + (bid.updatedAt - bid.createdAt);
   }, 0);
   const averageTimeMs = totalTime / acceptedBids.length;
-  
+
   // Calculate bid amount vs project budget ratio
   const budgetRatios = acceptedBids.map(bid => {
     if (bid.project && bid.project.budget_from && bid.project.budget_to) {
@@ -3377,7 +3488,7 @@ function analyzeHiringPatterns(acceptedBids) {
     return 1;
   });
   const averageRatio = budgetRatios.reduce((sum, ratio) => sum + ratio, 0) / budgetRatios.length;
-  
+
   return {
     averageTimeToAccept: formatDuration(averageTimeMs),
     averageBidVsBudgetRatio: averageRatio.toFixed(2),
@@ -3386,14 +3497,14 @@ function analyzeHiringPatterns(acceptedBids) {
 }
 async function calculateAverageTimeToHire(projects, bids) {
   if (projects.length === 0) return 'N/A';
-  
+
   const projectTimes = [];
-  
+
   for (const project of projects) {
     const projectBids = bids.filter(bid => bid.project.equals(project._id));
     if (projectBids.length > 0) {
-      const firstBidTime = projectBids.reduce((min, bid) => 
-        bid.createdAt < min ? bid.createdAt : min, 
+      const firstBidTime = projectBids.reduce((min, bid) =>
+        bid.createdAt < min ? bid.createdAt : min,
         projectBids[0].createdAt
       );
       const acceptedBid = projectBids.find(bid => bid.status === 'accepted');
@@ -3402,7 +3513,7 @@ async function calculateAverageTimeToHire(projects, bids) {
       }
     }
   }
-  
+
   if (projectTimes.length === 0) return 'N/A';
   const averageMs = projectTimes.reduce((sum, time) => sum + time, 0) / projectTimes.length;
   return formatDuration(averageMs);
@@ -3422,14 +3533,14 @@ function calculateFreelancerSatisfaction(bids) {
 }
 async function calculateAverageClientResponseTime(projects, bids) {
   if (projects.length === 0) return 'N/A';
-  
+
   const responseTimes = [];
-  
+
   for (const project of projects) {
     const projectBids = bids.filter(bid => bid.project.equals(project._id));
     if (projectBids.length > 0) {
-      const firstBidTime = projectBids.reduce((min, bid) => 
-        bid.createdAt < min ? bid.createdAt : min, 
+      const firstBidTime = projectBids.reduce((min, bid) =>
+        bid.createdAt < min ? bid.createdAt : min,
         projectBids[0].createdAt
       );
       const acceptedBid = projectBids.find(bid => bid.status === 'accepted');
@@ -3438,7 +3549,7 @@ async function calculateAverageClientResponseTime(projects, bids) {
       }
     }
   }
-  
+
   if (responseTimes.length === 0) return 'N/A';
   const averageMs = responseTimes.reduce((sum, time) => sum + time, 0) / responseTimes.length;
   return formatDuration(averageMs);
@@ -3446,7 +3557,7 @@ async function calculateAverageClientResponseTime(projects, bids) {
 async function getProjectActivity(userEmail, days) {
   const startDate = new Date();
   startDate.setDate(startDate.getDate() - days);
-  
+
   const projects = await Project.aggregate([
     {
       $match: {
@@ -3468,7 +3579,7 @@ async function getProjectActivity(userEmail, days) {
 async function getSpendingOverTime(userEmail, months) {
   const startDate = new Date();
   startDate.setMonth(startDate.getMonth() - months);
-  
+
   const spending = await Bid.aggregate([
     {
       $lookup: {
@@ -3500,32 +3611,32 @@ async function getSpendingOverTime(userEmail, months) {
 function formatDuration(ms) {
   const seconds = Math.floor(ms / 1000);
   if (seconds < 60) return `${seconds} seconds`;
-  
+
   const minutes = Math.floor(seconds / 60);
   if (minutes < 60) return `${minutes} minutes`;
-  
+
   const hours = Math.floor(minutes / 60);
   if (hours < 24) return `${hours} hours`;
-  
+
   const days = Math.floor(hours / 24);
   return `${days} days`;
 }
 const taskStorage = multer.diskStorage({
-  destination: function(req, file, cb) {
+  destination: function (req, file, cb) {
     const uploadPath = 'uploads/tasks';
     if (!fs.existsSync(uploadPath)) {
       fs.mkdirSync(uploadPath, { recursive: true });
     }
     cb(null, uploadPath);
   },
-  filename: function(req, file, cb) {
+  filename: function (req, file, cb) {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
     cb(null, uniqueSuffix + path.extname(file.originalname));
   }
 });
-const taskUpload = multer({ 
+const taskUpload = multer({
   storage: taskStorage,
-  limits: { 
+  limits: {
     fileSize: 10 * 1024 * 1024 // 10MB max for task attachments
   },
   fileFilter: (req, file, cb) => {
@@ -3628,7 +3739,7 @@ app.post('/api/tasks', verifyToken, taskUpload.array('attachments', 5), async (r
 
   } catch (error) {
     console.error('Error creating task:', error);
-    
+
     // Delete uploaded files if there was an error
     if (req.files) {
       req.files.forEach(file => {
@@ -3649,7 +3760,7 @@ app.post('/api/tasks', verifyToken, taskUpload.array('attachments', 5), async (r
     });
   }
 });
-app.post('/api/freelancer/projects', async (req, res) =>{
+app.post('/api/freelancer/projects', async (req, res) => {
   try {
     const { userId } = req.body;
 
@@ -3663,9 +3774,9 @@ app.post('/api/freelancer/projects', async (req, res) =>{
     }
 
     // Find accepted bids for the freelancer
-    const acceptedBids = await Bid.find({ 
-      freelancer: userId, 
-      status: 'accepted' 
+    const acceptedBids = await Bid.find({
+      freelancer: userId,
+      status: 'accepted'
     }).populate('project');
 
     // Extract unique projects from accepted bids
@@ -3724,7 +3835,7 @@ app.get('/api/users/tasks', async (req, res) => {
 
     // Build filter based on task type
     let filter = {};
-    
+
     if (type === 'assigned') {
       filter.assignedTo = req.user.id;
     } else if (type === 'created') {
@@ -3802,16 +3913,16 @@ app.get('/api/tasks/:taskId', async (req, res) => {
     //   data: task
     // });
     res.status(200).json({
-  success: true,
-  message: 'Task fetched successfully',
-  data: {
-    ...task.toObject(),
-    attachments: task.attachments.map(att => ({
-      ...att.toObject(),
-      url: `${req.protocol}://${req.get('host')}${att.path}`
-    }))
-  }
-});
+      success: true,
+      message: 'Task fetched successfully',
+      data: {
+        ...task.toObject(),
+        attachments: task.attachments.map(att => ({
+          ...att.toObject(),
+          url: `${req.protocol}://${req.get('host')}${att.path}`
+        }))
+      }
+    });
 
   } catch (error) {
     console.error('Error fetching task:', error);
@@ -3849,7 +3960,7 @@ app.put('/api/tasks/:taskId/status', async (req, res) => {
     const validTransitions = {
       'pending': ['in_progress', 'rejected'],
       'in_progress': ['completed', 'rejected'],
-      'completed': ['pending', 'rejected'], 
+      'completed': ['pending', 'rejected'],
       'rejected': ['pending', 'in_progress']
     };
 
@@ -3948,8 +4059,8 @@ app.post('/api/tasks/:taskId/comments', async (req, res) => {
     const newComment = task.comments[task.comments.length - 1];
 
     // Emit socket event for real-time updates
-    const otherUserId = task.assignedTo.toString() === req.user.id 
-      ? task.assignedBy 
+    const otherUserId = task.assignedTo.toString() === req.user.id
+      ? task.assignedBy
       : task.assignedTo;
 
     io.to(`user_${otherUserId}`).emit('new_comment', {
@@ -4028,7 +4139,7 @@ app.post('/api/tasks/:taskId/completion-proof', taskUpload.array('attachments', 
 
   } catch (error) {
     console.error('Error adding completion proof:', error);
-    
+
     // Delete uploaded files if there was an error
     if (req.files) {
       req.files.forEach(file => {
@@ -4052,14 +4163,14 @@ app.post('/api/tasks/:taskId/completion-proof', taskUpload.array('attachments', 
 app.get('/api/tasks/statistics', async (req, res) => {
   try {
     const userId = req.user.id;
-    
+
     const [assignedTasks, createdTasks] = await Promise.all([
       // Tasks assigned to user
       Task.aggregate([
         { $match: { assignedTo: new mongoose.Types.ObjectId(userId) } },
         { $group: { _id: '$status', count: { $sum: 1 } } }
       ]),
-      
+
       // Tasks created by user
       Task.aggregate([
         { $match: { assignedBy: new mongoose.Types.ObjectId(userId) } },
@@ -4071,14 +4182,14 @@ app.get('/api/tasks/statistics', async (req, res) => {
     const formatStats = (stats) => {
       const statuses = ['pending', 'in_progress', 'completed', 'rejected'];
       const result = {};
-      
+
       statuses.forEach(status => {
         const stat = stats.find(s => s._id === status);
         result[status] = stat ? stat.count : 0;
       });
-      
+
       result.total = Object.values(result).reduce((sum, count) => sum + count, 0);
-      
+
       return result;
     };
 
