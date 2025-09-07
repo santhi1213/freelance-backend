@@ -36,12 +36,7 @@ createUploadDirs();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
-// app.use(cors({
-//   origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:5173','*'], // Add your frontend URL
-//   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-//   allowedHeaders: ['Content-Type', 'Authorization'],
-//   credentials: true
-// }));
+
 app.use(cors({
   origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:5173', 'https://freelance-saa-s-jvxs.vercel.app', '*'],
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
@@ -1151,112 +1146,6 @@ app.delete('/api/profile/photo', verifyToken, async (req, res) => {
     });
   }
 });
-// Enhanced API endpoint to fetch all projects with user profile data
-// app.get('/api/projects/with-profiles', async (req, res) => {
-//   try {
-//     // Fetch all projects sorted by creation date (latest first)
-//     const projects = await Project.find().sort({ createdAt: -1 });
-
-//     // If no projects found
-//     if (!projects || projects.length === 0) {
-//       return res.status(200).json({
-//         success: true,
-//         message: 'No projects found',
-//         data: []
-//       });
-//     }
-
-//     // Enhance each project with user profile data
-//     const enhancedProjects = await Promise.all(
-//       projects.map(async (project) => {
-//         try {
-//           // Find user by email from the project
-//           const user = await User.findOne({ email: project.email })
-//             .select('fullName profilePhoto reviews email title location skills');
-
-//           // Calculate average rating from reviews
-//           let averageRating = 0;
-//           let totalReviews = 0;
-
-//           if (user && user.reviews && user.reviews.length > 0) {
-//             const totalRating = user.reviews.reduce((sum, review) => sum + review.rating, 0);
-//             totalReviews = user.reviews.length;
-//             averageRating = (totalRating / totalReviews).toFixed(1);
-//           }
-
-//           // Convert project to object and add user data
-//           const projectObj = project.toObject();
-
-//           return {
-//             ...projectObj,
-//             userProfile: user ? {
-//               id: user._id,
-//               fullName: user.fullName,
-//               email: user.email,
-//               title: user.title,
-//               location: user.location,
-//               skills: user.skills,
-//               profilePhoto: user.profilePhoto,
-//               rating: {
-//                 average: parseFloat(averageRating),
-//                 totalReviews: totalReviews
-//               }
-//             } : {
-//               id: null,
-//               fullName: 'Unknown User',
-//               email: project.email,
-//               title: null,
-//               location: null,
-//               skills: [],
-//               profilePhoto: null,
-//               rating: {
-//                 average: 0,
-//                 totalReviews: 0
-//               }
-//             }
-//           };
-//         } catch (userError) {
-//           console.error(`Error fetching user data for project ${project._id}:`, userError);
-
-//           // Return project with default user data if user fetch fails
-//           const projectObj = project.toObject();
-//           return {
-//             ...projectObj,
-//             userProfile: {
-//               id: null,
-//               fullName: 'Unknown User',
-//               email: project.email,
-//               title: null,
-//               location: null,
-//               skills: [],
-//               profilePhoto: null,
-//               rating: {
-//                 average: 0,
-//                 totalReviews: 0
-//               }
-//             }
-//           };
-//         }
-//       })
-//     );
-
-//     res.status(200).json({
-//       success: true,
-//       message: 'Projects fetched successfully',
-//       data: enhancedProjects,
-//       count: enhancedProjects.length
-//     });
-
-//   } catch (error) {
-//     console.error('Error fetching projects with profiles:', error);
-//     res.status(500).json({
-//       success: false,
-//       message: 'Failed to fetch projects',
-//       error: error.message
-//     });
-//   }
-// });
-// Alternative endpoint with pagination and filtering options
 app.get('/api/projects/enhanced', async (req, res) => {
   try {
     const {
@@ -1434,104 +1323,7 @@ app.get('/api/projects/enhanced', async (req, res) => {
     });
   }
 });
-// Get single project with user profile data
-// app.get('/api/projects/:id/with-profile', async (req, res) => {
-//   try {
-//     const { id } = req.params;
 
-//     // Validate project ID
-//     if (!mongoose.Types.ObjectId.isValid(id)) {
-//       return res.status(400).json({
-//         success: false,
-//         message: 'Invalid project ID'
-//       });
-//     }
-
-//     // Find the project
-//     const project = await Project.findById(id);
-
-//     if (!project) {
-//       return res.status(404).json({
-//         success: false,
-//         message: 'Project not found'
-//       });
-//     }
-
-//     // Find user by email from the project
-//     const user = await User.findOne({ email: project.email })
-//       .select('fullName profilePhoto reviews email title location skills hourlyRate bio availabilityPerWeek');
-
-//     // Calculate average rating from reviews
-//     let averageRating = 0;
-//     let totalReviews = 0;
-
-//     if (user && user.reviews && user.reviews.length > 0) {
-//       const totalRating = user.reviews.reduce((sum, review) => sum + review.rating, 0);
-//       totalReviews = user.reviews.length;
-//       averageRating = (totalRating / totalReviews).toFixed(1);
-//     }
-
-//     // Convert project to object and add user data
-//     const projectObj = project.toObject();
-
-//     const enhancedProject = {
-//       ...projectObj,
-//       userProfile: user ? {
-//         id: user._id,
-//         fullName: user.fullName,
-//         email: user.email,
-//         title: user.title,
-//         bio: user.bio,
-//         location: user.location,
-//         skills: user.skills,
-//         hourlyRate: user.hourlyRate,
-//         availabilityPerWeek: user.availabilityPerWeek,
-//         profilePhoto: user.profilePhoto,
-//         rating: {
-//           average: parseFloat(averageRating),
-//           totalReviews: totalReviews,
-//           reviews: user.reviews.map(review => ({
-//             clientName: review.clientName,
-//             clientAvatar: review.clientAvatar,
-//             rating: review.rating,
-//             comment: review.comment,
-//             date: review.date
-//           }))
-//         }
-//       } : {
-//         id: null,
-//         fullName: 'Unknown User',
-//         email: project.email,
-//         title: null,
-//         bio: null,
-//         location: null,
-//         skills: [],
-//         hourlyRate: null,
-//         availabilityPerWeek: null,
-//         profilePhoto: null,
-//         rating: {
-//           average: 0,
-//           totalReviews: 0,
-//           reviews: []
-//         }
-//       }
-//     };
-
-//     res.status(200).json({
-//       success: true,
-//       message: 'Project fetched successfully',
-//       data: enhancedProject
-//     });
-
-//   } catch (error) {
-//     console.error('Error fetching project with profile:', error);
-//     res.status(500).json({
-//       success: false,
-//       message: 'Failed to fetch project',
-//       error: error.message
-//     });
-//   }
-// });
 app.get('/api/projects/with-profiles', async (req, res) => {
   try {
     const projects = await Project.find().sort({ createdAt: -1 });
@@ -3906,12 +3698,7 @@ app.get('/api/tasks/:taskId', async (req, res) => {
       });
     }
 
-    // 🚨 Removed access check (req.user), now it just returns the task
-    // res.status(200).json({
-    //   success: true,
-    //   message: 'Task fetched successfully',
-    //   data: task
-    // });
+  
     res.status(200).json({
       success: true,
       message: 'Task fetched successfully',
@@ -4383,6 +4170,55 @@ app.put('/api/complete_project/:id', async (req, res) => {
     res.status(500).json({ message: 'Internal Server Error' });
   }
 });
+// GET /api/projects/accepted-by-email/:email
+app.get('/api/projects/accepted-by-email/:email', async (req, res) => {
+  try {
+    const { email } = req.params;
+
+    // 1. Find the user by email
+    const user = await User.findOne({ email }).select('_id email');
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // 2. Find all bids by this user that are accepted
+    const acceptedBids = await Bid.find({
+      freelancer: user._id,
+      status: 'accepted'
+    }).populate('project');
+
+    // 3. Extract unique project IDs from accepted bids
+    const projectIds = [...new Set(acceptedBids.map(bid => bid.project?._id).filter(Boolean))];
+
+    if (projectIds.length === 0) {
+      return res.status(200).json({
+        success: true,
+        message: 'No accepted projects found for this user.',
+        data: []
+      });
+    }
+
+    // 4. Fetch all project details for these IDs
+    const projects = await Project.find({ _id: { $in: projectIds } });
+
+    res.status(200).json({
+      success: true,
+      message: 'Accepted projects fetched successfully',
+      data: projects
+    });
+  } catch (error) {
+    console.error('Error fetching accepted projects by email:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch accepted projects',
+      error: error.message
+    });
+  }
+});
+
 
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
