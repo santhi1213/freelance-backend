@@ -356,6 +356,11 @@ const projectSchema = new mongoose.Schema({
     type: [String], // This makes it an array of strings
     required: true
   },
+  status: {
+    type: String,
+    enum: ["pending", "in-progress", "completed"],
+    default: "pending",
+  },
   project_id: {
   type: String,
   required: true,
@@ -4267,8 +4272,6 @@ app.put('/api/complete_project/:id', async (req, res) => {
     res.status(500).json({ message: 'Internal Server Error' });
   }
 });
-
-
 
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
