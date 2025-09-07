@@ -4221,6 +4221,54 @@ app.get('/user/:email', async (req, res) => {
     });
   }
 });
+// Update project status API
+app.put('/api/complete_project/:id', async (req, res) => {
+  try {
+    const { id } = req.params; // Use params, not query
+
+    // Find project by project_id
+    const project = await Project.findOne({ project_id: id });
+
+    if (!project) {
+      return res.status(404).json({ message: 'Project not found' });
+    }
+
+    // Fetch all tasks associated with the project
+    const tasks = await Task.find({ project: project._id });
+
+    // Condition 1: Project must have at least one task
+    if (tasks.length === 0) {
+      return res.status(400).json({ message: 'Cannot complete project: No tasks found for this project.' });
+    }
+
+    // Condition 2: All tasks must be completed
+    const allCompleted = tasks.every(task => task.status === 'completed');
+    if (!allCompleted) {
+      return res.status(400).json({ message: 'Cannot complete project: All tasks must have status "completed".' });
+    }
+
+    // Update project status to completed
+    const updatedProject = await Project.findOneAndUpdate(
+      { project_id: id }, // filter
+      { $set: { status: 'completed' } }, // update
+      { new: true } // return updated doc
+    );
+
+    if (!updatedProject) {
+      return res.status(404).json({ message: 'Project not found after update.' });
+    }
+
+    res.status(200).json({
+      message: 'Project marked as completed',
+      project: updatedProject
+    });
+  } catch (error) {
+    console.error('Error updating project status:', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+
 
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
