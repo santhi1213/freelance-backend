@@ -4218,6 +4218,39 @@ app.get('/api/projects/accepted-by-email/:email', async (req, res) => {
     });
   }
 });
+// GET /api/projects/:projectId/completion
+app.get('/api/projects/:projectId/completion', async (req, res) => {
+  try {
+    const { projectId } = req.params;
+
+    // Validate projectId
+    const project = await Project.findById(projectId);
+    if (!project) {
+      return res.status(404).json({ success: false, message: 'Project not found' });
+    }
+
+    // Get total and completed tasks for this project
+    const totalTasks = await Task.countDocuments({ project: projectId });
+    const completedTasks = await Task.countDocuments({ project: projectId, status: 'completed' });
+
+    // Calculate completion percentage
+    let completionPercentage = 0;
+    if (totalTasks > 0) {
+      completionPercentage = Math.round((completedTasks / totalTasks) * 100);
+    }
+
+    res.status(200).json({
+      success: true,
+      project: {
+        ...project.toObject(),
+        completionPercentage
+      }
+    });
+  } catch (error) {
+    console.error('Error calculating project completion:', error);
+    res.status(500).json({ success: false, message: 'Internal Server Error', error: error.message });
+  }
+});
 
 
 server.listen(PORT, () => {
